@@ -1,0 +1,92 @@
+# Redis Helm Values - High Availability Configuration
+# Chart: redis/redis from https://helm.redis.io/
+# Use case: HA demos, failover testing
+
+# Architecture: Replication (master + replicas)
+architecture: replication
+
+# Global settings
+global:
+  redis:
+    password: ""  # No password for demos
+
+# Authentication
+auth:
+  enabled: false  # Disabled for easy demos
+  sentinel: false
+
+# Master configuration
+master:
+  # Resource requests/limits
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 1000m
+
+  # Persistence - DISABLED for ephemeral infrastructure
+  persistence:
+    enabled: false
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    ports:
+      redis: 6379
+
+# Replica configuration
+replica:
+  replicaCount: 2  # 2 replicas for HA
+
+  # Resource requests/limits
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 1000m
+
+  # Persistence - DISABLED for ephemeral infrastructure
+  persistence:
+    enabled: false
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    ports:
+      redis: 6379
+
+# Metrics configuration
+metrics:
+  enabled: true
+  
+  resources:
+    requests:
+      memory: 64Mi
+      cpu: 50m
+    limits:
+      memory: 128Mi
+      cpu: 100m
+
+  serviceMonitor:
+    enabled: false  # Enable if Prometheus Operator is installed
+
+# Sentinel configuration (optional for automatic failover)
+sentinel:
+  enabled: false  # Can be enabled for automatic failover
+
+# Network Policy
+networkPolicy:
+  enabled: false
+
+# Pod Security Policy
+podSecurityPolicy:
+  create: false
+
+# Service Account
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false

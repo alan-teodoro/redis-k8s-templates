@@ -1,0 +1,22 @@
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Helm
+charts/
+*.tgz
+
+# Kubernetes
+kubeconfig
+*.kubeconfig

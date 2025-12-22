@@ -1,0 +1,50 @@
+# ArgoCD Application Template for Redis
+# This is a template - replace placeholders before applying
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: REPLACE_WITH_DEPLOYMENT_NAME  # e.g., redis-demo
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    # Redis Helm chart from official repository
+    repoURL: https://helm.redis.io/
+    chart: redis
+    targetRevision: "*"  # Use latest version
+    
+    helm:
+      # Values file from this repository
+      valueFiles:
+        - REPLACE_WITH_VALUES_FILE  # e.g., values-default.yaml, values-ha.yaml
+      
+      # Additional parameters (optional)
+      parameters: []
+        # - name: master.resources.requests.memory
+        #   value: "512Mi"
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: REPLACE_WITH_NAMESPACE  # e.g., default
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
