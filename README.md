@@ -1,163 +1,138 @@
-# Redis Kubernetes Templates
+# Redis Enterprise on Kubernetes - Reference Repository
 
-This repository contains Helm values templates for deploying Redis on Kubernetes clusters using the official Redis Helm chart.
+**Professional Services Reference Repository** for deploying and managing Redis Enterprise on Kubernetes across multiple platforms and cloud providers.
 
-## Overview
+## 📋 Purpose
 
-These templates are designed for **ephemeral infrastructure** - temporary Redis deployments that will be destroyed along with their host EKS clusters after a few days.
+This repository serves as a comprehensive reference for Redis Professional Services team and customers to:
+- Deploy Redis Enterprise in various Kubernetes environments (EKS, AKS, GKE, OpenShift, vanilla K8s)
+- Prepare pre-production and production environments
+- Conduct customer engagements, demos, and workshops
+- Practice and reproduce customer scenarios
+- Reference tested, production-ready configurations
 
-## Official Redis Helm Chart
+**Note**: This is a **reference repository** - documentation is concise and focused on practical deployment steps, not conceptual explanations.
 
-All templates use the official Redis Helm chart:
-- **Chart Repository**: https://helm.redis.io/
-- **Chart Name**: `redis/redis`
-- **Documentation**: https://github.com/redis/redis-helm-charts
-
-## Available Templates
-
-### 1. Default (Standalone)
-**File**: `redis/values-default.yaml`
-
-Minimal configuration for quick demos:
-- Single node (standalone)
-- No authentication
-- No persistence (ephemeral)
-- Metrics enabled
-
-**Use case**: Quick demos, testing, development
-
-### 2. High Availability (Replication)
-**File**: `redis/values-ha.yaml`
-
-Production-like setup with replication:
-- Master + 2 replicas
-- Automatic failover
-- No persistence (still ephemeral)
-- Metrics enabled
-
-**Use case**: HA demos, failover testing
-
-### 3. Development (Minimal)
-**File**: `redis/values-dev.yaml`
-
-Absolute minimum resources:
-- Single node
-- Minimal memory/CPU
-- No metrics
-- No persistence
-
-**Use case**: Resource-constrained environments, CI/CD
-
-## Usage
-
-### Option 1: Via Backstage Template (Recommended)
-
-1. Navigate to Backstage
-2. Select "Deploy Redis on EKS" template
-3. Choose your EKS cluster
-4. Select configuration (default/HA/dev)
-5. Deploy!
-
-### Option 2: Direct Helm Install
-
-```bash
-# Add Redis Helm repository
-helm repo add redis https://helm.redis.io/
-helm repo update
-
-# Install with default values
-helm install my-redis redis/redis \
-  -f redis/values-default.yaml \
-  -n default
-
-# Install with HA configuration
-helm install my-redis redis/redis \
-  -f redis/values-ha.yaml \
-  -n default
-```
-
-### Option 3: ArgoCD (GitOps)
-
-```bash
-# Apply ArgoCD Application
-kubectl apply -f redis/argocd-app.yaml
-```
-
-## Customization
-
-### Quick Customization (No Branch)
-
-Edit values inline when deploying via Backstage or create a local values file:
-
-```bash
-helm install my-redis redis/redis \
-  -f redis/values-default.yaml \
-  --set master.resources.requests.memory=2Gi
-```
-
-### Advanced Customization (Branch)
-
-For complex customizations:
-
-1. Create a branch: `git checkout -b my-cluster-redis-customization`
-2. Edit `redis/values-*.yaml` files
-3. Commit changes
-4. Use branch name in Backstage template or ArgoCD
-
-**Note**: Since infrastructure is ephemeral, orphaned branches are not a concern - they'll be cleaned up when the cluster is destroyed.
-
-## Connection Information
-
-After deployment, get connection details:
-
-```bash
-# Get Redis password (if auth enabled)
-export REDIS_PASSWORD=$(kubectl get secret my-redis -o jsonpath="{.data.redis-password}" | base64 -d)
-
-# Port forward to access locally
-kubectl port-forward svc/my-redis-master 6379:6379
-
-# Connect with redis-cli
-redis-cli -h 127.0.0.1 -p 6379 -a $REDIS_PASSWORD
-```
-
-## Cleanup
-
-### Manual Cleanup
-```bash
-helm uninstall my-redis -n default
-```
-
-### Automatic Cleanup
-When the EKS cluster is destroyed (via Backstage TTL), all Redis deployments are automatically removed.
-
-## Architecture
+## 🗂️ Repository Structure
 
 ```
-┌─────────────────────────────────────────┐
-│         EKS Cluster (Ephemeral)         │
-│                                         │
-│  ┌───────────────────────────────────┐  │
-│  │     Redis Deployment              │  │
-│  │                                   │  │
-│  │  ┌──────────┐    ┌──────────┐    │  │
-│  │  │  Master  │───▶│ Replica  │    │  │
-│  │  └──────────┘    └──────────┘    │  │
-│  │                                   │  │
-│  │  Service: my-redis-master         │  │
-│  │  Service: my-redis-replicas       │  │
-│  └───────────────────────────────────┘  │
-│                                         │
-│  Deployed via: Backstage + ArgoCD/Helm  │
-└─────────────────────────────────────────┘
+redis-k8s-templates/
+│
+├── operator/                   # Redis Enterprise Operator installation & management
+├── deployments/                # Redis Enterprise deployment patterns
+│   └── redis-enterprise/
+│       ├── single-cluster/     # Standard single-cluster deployments
+│       ├── active-active/      # Multi-cluster Active-Active
+│       ├── active-passive/     # Disaster recovery configurations
+│       └── modules/            # Deployments with Redis modules
+│
+├── platforms/                  # Platform-specific configurations
+│   ├── eks/                    # AWS Elastic Kubernetes Service
+│   ├── aks/                    # Azure Kubernetes Service
+│   ├── gke/                    # Google Kubernetes Engine
+│   ├── openshift/              # Red Hat OpenShift
+│   └── vanilla/                # Generic Kubernetes
+│
+├── integrations/               # Third-party tool integrations
+│   ├── argocd/                 # GitOps with ArgoCD
+│   ├── vault/                  # HashiCorp Vault for secrets
+│   ├── cert-manager/           # Certificate management
+│   ├── ingress/                # Ingress controllers (NGINX, Traefik, etc.)
+│   └── service-mesh/           # Service mesh integrations
+│
+├── monitoring/                 # Monitoring & observability
+│   ├── prometheus/             # Prometheus integration
+│   ├── grafana/                # Grafana dashboards
+│   ├── datadog/                # Datadog integration
+│   └── newrelic/               # New Relic integration
+│
+├── security/                   # Security configurations
+│   ├── tls/                    # TLS/SSL certificates
+│   ├── rbac/                   # Role-based access control
+│   ├── network-policies/       # Network isolation
+│   ├── pod-security/           # Pod security policies/standards
+│   └── secrets-management/     # Secrets management solutions
+│
+├── networking/                 # Networking configurations
+│   ├── services/               # Service types (ClusterIP, LoadBalancer, etc.)
+│   ├── ingress/                # Ingress configurations
+│   └── dns/                    # DNS configurations
+│
+├── storage/                    # Storage configurations
+│   ├── storage-classes/        # Platform-specific storage classes
+│   └── pvc-examples/           # PVC examples
+│
+├── backup-restore/             # Backup and restore procedures
+├── disaster-recovery/          # DR strategies and runbooks
+├── testing/                    # Testing and validation tools
+├── automation/                 # Automation scripts and IaC
+├── examples/                   # End-to-end scenario examples
+└── docs/                       # Quick reference guides
 ```
 
-## Support
+## 🚀 Quick Start
 
-For issues or questions:
-- Check official Redis Helm chart docs: https://github.com/redis/redis-helm-charts
-- Contact Redis Professional Services team
+### For OpenShift Users
+The most complete examples are currently in the OpenShift section:
+- **Single-region deployment**: [`platforms/openshift/single-region/`](platforms/openshift/single-region/)
+- **Active-Active deployment**: [`platforms/openshift/active-active/`](platforms/openshift/active-active/)
 
-## License
+Each includes:
+- Step-by-step deployment guide
+- All required YAML files
+- Connection and testing instructions
 
-MIT License - See official Redis Helm chart for chart-specific licensing.
+### For Other Platforms
+Content for EKS, AKS, GKE, and vanilla Kubernetes is being added progressively. Check the respective platform directories.
+
+## 📚 Documentation
+
+- **[Deployment Patterns](docs/deployment-patterns.md)** - When to use which deployment pattern
+- **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
+- **[Security Checklist](docs/security-checklist.md)** - Security best practices
+- **[Sizing Guide](docs/sizing-guide.md)** - Resource sizing recommendations
+
+## 🎯 Common Use Cases
+
+| Use Case | Location | Description |
+|----------|----------|-------------|
+| Single-cluster deployment | `deployments/redis-enterprise/single-cluster/` | Standard Redis Enterprise cluster |
+| Active-Active geo-distribution | `deployments/redis-enterprise/active-active/` | Multi-region with CRDT replication |
+| OpenShift deployment | `platforms/openshift/` | Complete OpenShift examples |
+| ArgoCD GitOps | `integrations/argocd/` | GitOps deployment patterns |
+| Vault secrets integration | `integrations/vault/` | Secrets management with Vault |
+| Prometheus monitoring | `monitoring/prometheus/` | Metrics and alerting |
+
+## 🔧 Prerequisites
+
+- Kubernetes cluster (1.23+) or OpenShift (4.10+)
+- kubectl or oc CLI configured
+- Cluster admin access (for operator installation)
+- Sufficient resources (see sizing guide)
+
+## 📖 How to Use This Repository
+
+1. **Find your platform**: Navigate to `platforms/<your-platform>/`
+2. **Choose deployment pattern**: Check `deployments/redis-enterprise/<pattern>/`
+3. **Review integrations**: Add monitoring, secrets management, etc. from `integrations/`
+4. **Follow step-by-step guides**: Each section has README.md with deployment steps
+5. **Test and validate**: Use tools from `testing/` directory
+
+## 🤝 Contributing
+
+This is a living reference repository. When adding new content:
+- Follow the existing documentation style (see OpenShift examples)
+- Include step-by-step deployment instructions
+- Test all YAML files before committing
+- Keep documentation concise and reference-focused
+- No conceptual explanations - focus on "how-to"
+
+## 📞 Support
+
+For Redis Professional Services team and customers:
+- Internal: Contact Redis PS team
+- Customers: Reach out to your Redis account team
+
+## 📄 License
+
+Internal Redis Professional Services resource.

@@ -1,0 +1,52 @@
+# ValidatingWebhookConfiguration for Redis Enterprise Admission Controller
+#
+# This webhook validates RedisEnterpriseDatabase (REDB) resources before they are created or updated.
+# It prevents invalid configurations from being applied to the cluster.
+#
+# Prerequisites:
+# - Redis Enterprise Operator installed
+# - Redis Enterprise Cluster (REC) deployed
+# - admission-tls secret exists in redis-enterprise namespace
+#
+# After applying this file, you must patch it with the certificate from the admission-tls secret:
+#
+#   CERT=$(kubectl get secret admission-tls -n redis-enterprise -o jsonpath='{.data.cert}')
+#   kubectl patch ValidatingWebhookConfiguration redis-enterprise-admission \
+#     --type='json' -p="[{'op': 'replace', 'path': '/webhooks/0/clientConfig/caBundle', 'value':'${CERT}'}]"
+#
+# Reference: https://redis.io/docs/latest/operate/kubernetes/deployment/quick-start/#enable-the-admission-controller
+
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: redis-enterprise-admission
+webhooks:
+  - name: redisenterprise.admission.redislabs
+    admissionReviewVersions:
+      - v1
+      - v1beta1
+    clientConfig:
+      # The caBundle will be patched after creation with the certificate from admission-tls secret
+      caBundle: ""
+      service:
+        name: redis-enterprise-operator
+        namespace: redis-enterprise
+        path: /admission
+        port: 443
+    failurePolicy: Ignore
+    matchPolicy: Exact
+    rules:
+      - apiGroups:
+          - app.redislabs.com
+        apiVersions:
+          - v1
+          - v1alpha1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - redisenterprisedatabases
+        scope: Namespaced
+    sideEffects: None
+    timeoutSeconds: 5
+

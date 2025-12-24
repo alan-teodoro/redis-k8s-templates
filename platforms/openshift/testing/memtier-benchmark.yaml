@@ -1,0 +1,88 @@
+# IMPORTANT: Update the certificate below with the actual certificate from your Redis Enterprise Cluster
+# To get the certificate:
+# 1. Access the Redis Enterprise UI
+# 2. Navigate to Cluster → Security → Certificates
+# 3. Copy the "Proxy certificate" content
+# 4. Replace the certificate content below
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-cert
+type: Opaque
+stringData:
+  redis.pem: |-
+    -----BEGIN CERTIFICATE-----
+    MIIF1jCCA76gAwIBAgIBATANBgkqhkiG9w0BAQsFADBkMSkwJwYDVQQDDCByZWMu
+    cmVkaXMtbnMtYS5zdmMuY2x1c3Rlci5sb2NhbDEQMA4GA1UECwwHcmVkaXNkYjEl
+    MCMGA1UECgwcUmVkaXNMYWJzIEVudGVycHJpc2UgQ2x1c3RlcjAeFw0yNTEyMDgx
+    MTM1MTlaFw0yNjEyMDgxMTM1MTlaMGQxKTAnBgNVBAMMIHJlYy5yZWRpcy1ucy1h
+    LnN2Yy5jbHVzdGVyLmxvY2FsMRAwDgYDVQQLDAdyZWRpc2RiMSUwIwYDVQQKDBxS
+    ZWRpc0xhYnMgRW50ZXJwcmlzZSBDbHVzdGVyMIICIjANBgkqhkiG9w0BAQEFAAOC
+    Ag8AMIICCgKCAgEA1PH6jser4fjqw16x46h0izgvCPmTvGulc48ejL4ZxourO6ut
+    vuWUwhz32pLNW6t7wV/q+KGCHsm/BIGiLARy4YZv7CFnOYfCahBufLA9o7K6PXGh
+    sP5aFX6mX4/76QqZtx6gyBJPllSxGu66QC+ksWRZyOhVsCjE+pSsRAkomGnlfHUk
+    Hi6FWHiwL+Utb1Xqt5CVGPnPGTz0vgc2WWvSKZx8zACdooGP5iXEwdTZNd6prals
+    yPo0s6XMxxEhkmLT1/1SRjKojMVwJGx+CzTojoY/CKrazIS5z9+jA36xPQQUQEe6
+    tbcp79/ZaZtsLT1MY+OtlxNRHwsrKq32P8Ft64vCaRuVSzSVCu37Bo3dnmQ4xQ1H
+    c40Ad4NBf31Fk+Vlm7HB+6yBYsbFY8Pg2tK1wQscpn6vBxCAGoIJijlmCm5EpWX/
+    4r4w8NWih0X3S4KONo/KNOuveiHC8dz+yEAAZ+S6j8TsJKtKCT/ifh5L/AloTMQw
+    SxKoJ63/ILwaRlo2K+InAm6P76PKKqQ+5LUStbeF3wcKSgyH55hYJPbhkDTVK7Z/
+    /ABGx+fQSNB/jqUqJZ803wBHfahjgwSj6GNIR4iekOiIa5I4Q1L1I6iMp+VMkRYT
+    cuXm4CLM3skEOExEjO2x0sw/VGMmWPOewmZGKgygxYT7+E/tUP/2XyDXgz0CAwEA
+    AaOBkjCBjzAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwTwYDVR0RBEgw
+    RoIgcmVjLnJlZGlzLW5zLWEuc3ZjLmNsdXN0ZXIubG9jYWyCIioucmVjLnJlZGlz
+    LW5zLWEuc3ZjLmNsdXN0ZXIubG9jYWwwHQYDVR0OBBYEFL3XInXRciOEE7caFzvB
+    P11kWJqLMA0GCSqGSIb3DQEBCwUAA4ICAQB5wr3k/oTBojgLxtfI6WPq3eud12J8
+    r0nIFqb1nkvhxz6YIJo8ejNKMTLK0wezj6A84yqxpn7O3la8FwIhtcjA3/VQUyAD
+    Ltgp+eGUWQN/VvHhb8TohODidnIKvUHyvHnoz828AUgewfB5IgU0yxURoq2Dh1dA
+    O4QPLfxTaWNVsLnDrosrIOhZmHLqEzzYCYcdWt4ID2saNjfG/3+QAwBSxbULTnEE
+    0vZrVmIhC7D0MHhaWGTgoQFkWCfrqoKgZkNM8XS3Jdt1WJ65lERdWGy2rW/z3Vq9
+    7YGVxX6qyI/gjc20cIyg07bfV5gR/MN5v9eb/gSi9GFcQcqsdVZEeMAfpif23ByY
+    0F6iAGTMkokAYK/2sv6vxKfshPMflss6FsAPYjSoBtt4GRXVAgll5jiXZtFf/ImP
+    tzJzlqwB9Vn1noicwS/y0eKbQtpLPoaOeNndK5L2tnNM9x9UfTa0BjDH8ty0xPgO
+    8S2hZFnW5AxN8f6nC8vgU/3NmvJKzHUwkFEYzcQylzkmIxwQ92g2BJyCpUSfO9I7
+    DXzQhyj2Sqi8oSZ1lDPStDLTTLEND+l0mOD1KLUUAejiqTGnfwwxucLUtUcTF8Cx
+    mbPhD7mgAK4BIs/h8/3UCEfIka0UkFew2+DVClIVHGbp1lbCTJkS0p3FJ3ONPVbp
+    uoynvyBSIEIuTg==
+    -----END CERTIFICATE-----
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: memtier-shell
+  labels:
+    app: memtier-shell
+spec:
+  restartPolicy: Always
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: memtier
+      image: redislabs/memtier_benchmark:latest
+      command: ["sleep", "infinity"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        capabilities:
+          drop: ["ALL"]
+        readOnlyRootFilesystem: true
+      resources:
+        requests:
+          memory: "1Gi"
+          cpu: "1"
+        limits:
+          memory: "2Gi"
+          cpu: "2"
+      volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: redis-cert                 # MOUNT THE SECRET
+          mountPath: /etc/redis-certs      # cert visible here
+          readOnly: true
+  volumes:
+    - name: tmp
+      emptyDir: {}
+    - name: redis-cert
+      secret:
+        secretName: redis-cert

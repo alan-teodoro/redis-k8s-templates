@@ -1,0 +1,33 @@
+# High-performance io2 StorageClass for Redis Enterprise on EKS
+# 
+# io2 is recommended for high-performance production workloads:
+# - Provisioned IOPS (up to 64,000 IOPS per volume)
+# - Higher durability (99.999% vs 99.8-99.9% for gp3)
+# - Lower latency
+# - Higher cost than gp3
+#
+# Use cases:
+# - Production databases with high throughput requirements
+# - Latency-sensitive applications
+# - Mission-critical workloads
+#
+# Apply with: kubectl apply -f io2-storageclass.yaml
+#
+# Reference: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebs-volume-types.html
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: redis-storage-io2
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: io2
+  iops: "10000"             # Provisioned IOPS (adjust based on workload)
+  encrypted: "true"         # Enable encryption at rest
+  # fsType: ext4            # Default filesystem
+volumeBindingMode: WaitForFirstConsumer  # Ensures volume is created in same AZ as pod
+allowVolumeExpansion: true                # Allow PVC expansion
+reclaimPolicy: Delete                     # Delete volume when PVC is deleted
+

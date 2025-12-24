@@ -1,0 +1,174 @@
+# PrometheusRule for Redis Enterprise Alerts
+# Common alerts for Redis Enterprise clusters and databases
+#
+# Updated for Redis Enterprise v8.0+ metrics v2
+# Reference: https://redis.io/docs/latest/operate/rs/references/metrics/prometheus-metrics-v2/
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: redis-enterprise-alerts
+  namespace: monitoring
+  labels:
+    app: redis-enterprise
+    release: kube-prometheus-stack
+spec:
+  groups:
+    # Cluster-level alerts (v2 metrics)
+    - name: redis-enterprise-cluster
+      interval: 30s
+      rules:
+        # Node down alert
+        - alert: RedisEnterpriseNodeDown
+          expr: node_metrics_up == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: cluster
+          annotations:
+            summary: "Redis Enterprise node {{ $labels.pod }} is down"
+            description: "Redis Enterprise node {{ $labels.pod }} in cluster {{ $labels.cluster }} has been down for more than 2 minutes."
+
+        # Cluster lost quorum
+        - alert: RedisEnterpriseClusterLostQuorum
+          expr: has_quorum == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: cluster
+          annotations:
+            summary: "Redis Enterprise cluster {{ $labels.cluster }} lost quorum"
+            description: "Redis Enterprise cluster {{ $labels.cluster }} has lost quorum - cluster operations may be impacted."
+
+        # High memory usage (freeable memory < 20%)
+        - alert: RedisEnterpriseHighMemoryUsage
+          expr: |
+            ((node_memory_MemTotal_bytes - node_memory_MemFree_bytes - node_memory_Buffers_bytes - node_memory_Cached_bytes) / node_memory_MemTotal_bytes) * 100 > 80
+          for: 5m
+          labels:
+            severity: warning
+            component: cluster
+          annotations:
+            summary: "Redis Enterprise node {{ $labels.pod }} high memory usage"
+            description: "Redis Enterprise node {{ $labels.pod }} memory usage is {{ $value | humanize }}%"
+
+        # Critical memory usage (freeable memory < 10%)
+        - alert: RedisEnterpriseCriticalMemoryUsage
+          expr: |
+            ((node_memory_MemTotal_bytes - node_memory_MemFree_bytes - node_memory_Buffers_bytes - node_memory_Cached_bytes) / node_memory_MemTotal_bytes) * 100 > 90
+          for: 2m
+          labels:
+            severity: critical
+            component: cluster
+          annotations:
+            summary: "Redis Enterprise node {{ $labels.pod }} critical memory usage"
+            description: "Redis Enterprise node {{ $labels.pod }} memory usage is {{ $value | humanize }}%"
+
+        # High CPU usage
+        - alert: RedisEnterpriseHighCPUUsage
+          expr: |
+            (rate(node_cpu_user[5m]) + rate(node_cpu_system[5m])) * 100 > 80
+          for: 5m
+          labels:
+            severity: warning
+            component: cluster
+          annotations:
+            summary: "Redis Enterprise node {{ $labels.pod }} high CPU usage"
+            description: "Redis Enterprise node {{ $labels.pod }} CPU usage is {{ $value | humanize }}%"
+
+        # Low disk space
+        - alert: RedisEnterpriseLowDiskSpace
+          expr: |
+            (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 20
+          for: 5m
+          labels:
+            severity: warning
+            component: cluster
+          annotations:
+            summary: "Redis Enterprise node {{ $labels.pod }} low disk space"
+            description: "Redis Enterprise node {{ $labels.pod }} has only {{ $value | humanize }}% disk space available"
+
+        # Certificate expiring soon (30 days)
+        - alert: RedisEnterpriseCertificateExpiringSoon
+          expr: node_cert_expires_in_seconds < (30 * 86400)
+          for: 1h
+          labels:
+            severity: warning
+            component: cluster
+          annotations:
+            summary: "Redis Enterprise node {{ $labels.pod }} certificate expiring soon"
+            description: "Redis Enterprise node {{ $labels.pod }} certificate expires in {{ $value | humanizeDuration }}"
+    
+    # Database-level alerts (v2 metrics)
+    - name: redis-enterprise-database
+      interval: 30s
+      rules:
+        # Replica link down
+        - alert: RedisEnterpriseReplicaLinkDown
+          expr: redis_server_master_link_status == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: database
+          annotations:
+            summary: "Redis Enterprise database {{ $labels.db_name }} replica link down"
+            description: "Database {{ $labels.db_name }} replica link has been down for more than 2 minutes - high availability at risk."
+
+        # High database memory usage
+        - alert: RedisEnterpriseDatabaseHighMemory
+          expr: |
+            (redis_server_used_memory / redis_server_maxmemory) * 100 > 80
+          for: 5m
+          labels:
+            severity: warning
+            component: database
+          annotations:
+            summary: "Redis Enterprise database {{ $labels.db_name }} high memory usage"
+            description: "Database {{ $labels.db_name }} memory usage is {{ $value | humanize }}%"
+
+        # Database evicting keys
+        - alert: RedisEnterpriseDatabaseEvictingKeys
+          expr: rate(redis_server_evicted_keys[5m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: database
+          annotations:
+            summary: "Redis Enterprise database {{ $labels.db_name }} is evicting keys"
+            description: "Database {{ $labels.db_name }} is evicting {{ $value | humanize }} keys/sec due to memory pressure"
+
+        # Low cache hit rate
+        - alert: RedisEnterpriseLowCacheHitRate
+          expr: |
+            rate(redis_server_keyspace_read_hits[5m]) / (rate(redis_server_keyspace_read_hits[5m]) + rate(redis_server_keyspace_read_misses[5m])) < 0.8
+          for: 10m
+          labels:
+            severity: warning
+            component: database
+          annotations:
+            summary: "Redis Enterprise database {{ $labels.db_name }} low cache hit rate"
+            description: "Database {{ $labels.db_name }} cache hit rate is {{ $value | humanizePercentage }} - consider reviewing cache strategy"
+
+        # High connection churn
+        - alert: RedisEnterpriseHighConnectionChurn
+          expr: |
+            rate(endpoint_client_disconnections[5m]) > 100
+          for: 5m
+          labels:
+            severity: warning
+            component: database
+          annotations:
+            summary: "Redis Enterprise database {{ $labels.db_name }} high connection churn"
+            description: "Database {{ $labels.db_name }} has {{ $value | humanize }} disconnections/sec - investigate client behavior"
+
+        # Active defragmentation running at high CPU
+        - alert: RedisEnterpriseHighDefragCPU
+          expr: redis_server_active_defrag_running > 50
+          for: 10m
+          labels:
+            severity: info
+            component: database
+          annotations:
+            summary: "Redis Enterprise database {{ $labels.db_name }} high defragmentation CPU"
+            description: "Database {{ $labels.db_name }} defragmentation is using {{ $value | humanize }}% CPU - may impact performance"
+

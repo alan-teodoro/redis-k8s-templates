@@ -1,0 +1,161 @@
+# Helm values for kube-prometheus-stack
+# Optimized for Redis Enterprise monitoring
+#
+# This configuration is cloud-agnostic and uses the cluster's default StorageClass
+
+# Prometheus configuration
+prometheus:
+  prometheusSpec:
+    # Retention period for metrics
+    retention: 15d
+    retentionSize: "10GB"
+    
+    # Storage configuration
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          # storageClassName: Uses cluster default StorageClass
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
+    
+    # Resource limits
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 1000m
+        memory: 4Gi
+    
+    # ServiceMonitor selector - monitor all namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    
+    # PodMonitor selector
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    
+    # PrometheusRule selector
+    ruleSelectorNilUsesHelmValues: false
+    ruleSelector: {}
+    
+    # Scrape interval
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+
+# Grafana configuration
+grafana:
+  enabled: true
+  
+  # Admin credentials
+  adminPassword: prom-operator
+  
+  # Persistence
+  persistence:
+    enabled: true
+    # storageClassName: Uses cluster default StorageClass
+    size: 10Gi
+  
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Grafana configuration
+  grafana.ini:
+    server:
+      root_url: http://localhost:3000
+    analytics:
+      check_for_updates: false
+  
+  # Data sources
+  # Note: kube-prometheus-stack already creates a Prometheus datasource by default
+  # We don't need to create another one to avoid conflicts
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources: []
+  
+  # Dashboard providers
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'default'
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+        - name: 'redis-enterprise'
+          orgId: 1
+          folder: 'Redis Enterprise'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/redis-enterprise
+  
+  # Dashboards
+  # Note: Dashboards should be imported manually via Grafana UI or created as ConfigMaps
+  # See: monitoring/grafana/dashboards/redis-enterprise-overview.json
+  dashboards:
+    default: {}
+    redis-enterprise: {}
+
+# AlertManager configuration
+alertmanager:
+  enabled: true
+  
+  alertmanagerSpec:
+    # Storage
+    storage:
+      volumeClaimTemplate:
+        spec:
+          # storageClassName: Uses cluster default StorageClass
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+    
+    # Resource limits
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+# Node exporter - collects node-level metrics
+prometheus-node-exporter:
+  enabled: true
+
+# Kube state metrics - collects Kubernetes object metrics
+kube-state-metrics:
+  enabled: true
+
+# Disable components we don't need for Redis Enterprise monitoring
+kubeApiServer:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+

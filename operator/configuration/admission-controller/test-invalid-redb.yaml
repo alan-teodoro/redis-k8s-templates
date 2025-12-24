@@ -1,0 +1,27 @@
+# Test file for Redis Enterprise Admission Controller
+#
+# This file contains an INVALID RedisEnterpriseDatabase configuration.
+# It is used to verify that the admission controller is working correctly.
+#
+# When you apply this file, the admission controller should REJECT it with an error message.
+#
+# Expected error:
+#   Error from server: admission webhook "redisenterprise.admission.redislabs" denied the request:
+#   eviction_policy: u'illegal' is not one of [u'volatile-lru', u'volatile-ttl', u'volatile-random',
+#   u'allkeys-lru', u'allkeys-random', u'noeviction', u'volatile-lfu', u'allkeys-lfu']
+#
+# Usage:
+#   kubectl apply -f test-invalid-redb.yaml
+#
+# If you see the error above, the admission controller is working correctly!
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: test-invalid-database
+  namespace: redis-enterprise
+spec:
+  # This evictionPolicy value is INVALID and should be rejected
+  evictionPolicy: illegal
+  memorySize: 100MB
+

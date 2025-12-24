@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: redis-operator
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://helm.redis.io/
+    chart: redis-enterprise-operator
+    targetRevision: 7.22.0-15
+    helm:
+      values: |
+        image: redislabs/operator:7.22.0-15
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: redis
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true

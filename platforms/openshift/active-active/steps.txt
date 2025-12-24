@@ -1,0 +1,52 @@
+Pre-reqs:
+- Create namespaces in both clusters (redis-ns-a and redis-ns-b)
+- Install Redis Enterprise Operator in Both Clusters (via OperatorHub or manually)
+- Apply Security Context Constraints in both clusters (if not using OperatorHub):
+
+  Cluster A:
+  oc apply -f ../openshift/scc.yaml
+  oc adm policy add-scc-to-user redis-enterprise-scc-v2 system:serviceaccount:redis-ns-a:redis-enterprise-operator
+  oc adm policy add-scc-to-user redis-enterprise-scc-v2 system:serviceaccount:redis-ns-a:rec-a
+
+  Cluster B:
+  oc apply -f ../openshift/scc.yaml
+  oc adm policy add-scc-to-user redis-enterprise-scc-v2 system:serviceaccount:redis-ns-b:redis-enterprise-operator
+  oc adm policy add-scc-to-user redis-enterprise-scc-v2 system:serviceaccount:redis-ns-b:rec-b
+
+- Enable the admission controller and validating webhook if not installed using OperatorHub
+  https://redis.io/docs/latest/operate/kubernetes/deployment/quick-start/#enable-the-admission-controller/
+
+Steps:
+
+1 - Apply 00-rec-admin-secret.yaml in each Cluster (specific)
+2 - Apply 00-rec.yaml in each Cluster (specific)
+3 - Apply 01-recr-secrets.yaml in Both Clusters
+4 - Apply 01-recr.yaml in Both Clusters
+5 - Apply 02-reaadb-secret.yaml in each Cluster (specific)
+6 - Apply 02-reaadb.yaml in Cluster A
+7 - Create Route for UI in Cluster A and B (03-route-ui.yaml)
+
+UI:
+https://route-ui-redis-ns-b.apps.cluster-lwrtg.dynamic.redhatworkshops.io
+https://route-ui-redis-ns-b.apps.cluster-2mp82.dynamic.redhatworkshops.io
+
+To access database:
+
+Cluster A:
+host: https://reaadb-aadb-db-rec-a-redis-ns-a.apps.cluster-lwrtg.dynamic.redhatworkshops.io
+port: 443
+username: default
+password: RedisAdmin123!
+
+Security:
+Enable Use TLS
+Enable Use SNI
+server name: reaadb-aadb-db-rec-a-redis-ns-a.apps.cluster-lwrtg.dynamic.redhatworkshops.io
+
+Enable Verify TLS Certificate
+Copy Server certificate from UI
+Add CA Certificate and copy certificate content from each cluster
+
+Repeat for Cluster B.
+
+Test Connections.

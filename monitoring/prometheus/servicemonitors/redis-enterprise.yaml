@@ -1,0 +1,47 @@
+# ServiceMonitor for Redis Enterprise Cluster
+# This tells Prometheus where to scrape Redis Enterprise metrics
+#
+# Redis Enterprise for Kubernetes exposes metrics on port 8070 via the <rec-name>-prom service
+# The service is automatically created by the Redis Enterprise Operator
+#
+# Reference: https://redis.io/docs/latest/operate/kubernetes/re-clusters/connect-prometheus-operator/
+#
+# Metrics v2 (Redis Enterprise 8.0+):
+# - Endpoint: https://<IP>:8070/v2
+# - Includes cluster, database, node, and shard metrics
+# - Also exposes node_exporter v1.8.1 metrics
+#
+# For v1 metrics (Redis Enterprise 7.x), remove the 'path: /v2' line
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-enterprise-cluster
+  namespace: monitoring
+  labels:
+    app: redis-enterprise
+    release: kube-prometheus-stack
+spec:
+  # Select the Redis Enterprise prometheus service
+  # The operator creates a service with label: redis.io/service=prom-metrics
+  selector:
+    matchLabels:
+      redis.io/service: prom-metrics
+
+  # Monitor services in the redis-enterprise namespace
+  namespaceSelector:
+    matchNames:
+      - redis-enterprise
+
+  # Endpoint configuration
+  endpoints:
+    # Scrape v2 metrics from the prometheus port (8070)
+    - port: prometheus
+      path: /v2
+      interval: 15s
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+
+
+

@@ -1,0 +1,33 @@
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-b
+  namespace: redis-ns-b
+spec:  
+  bootstrapperImageSpec:
+    repository: registry.connect.redhat.com/redislabs/redis-enterprise-operator
+  usageMeter:
+    callHomeClient:
+      imageSpec:
+        repository: registry.connect.redhat.com/redislabs/call-home-client
+  redisEnterpriseServicesRiggerImageSpec:
+    repository: registry.connect.redhat.com/redislabs/services-manager
+  redisEnterpriseImageSpec:
+    repository: registry.connect.redhat.com/redislabs/redis-enterprise
+  nodes: 3
+  username: admin@redis.com
+  ingressOrRouteSpec:
+    method: openShiftRoute
+    apiFqdnUrl: api-rec-b-redis-ns-b.apps.cluster-2mp82.dynamic.redhatworkshops.io
+    dbFqdnSuffix: -db-rec-b-redis-ns-b.apps.cluster-2mp82.dynamic.redhatworkshops.io 
+  persistentSpec:
+    enabled: true
+    # storageClassName: <your-storageclass>        # optional
+    # volumeSize: 20Gi                             # optional    
+  redisEnterpriseNodeResources:
+    requests:
+      cpu: 2
+      memory: 4Gi
+    limits:
+      cpu: 2
+      memory: 4Gi

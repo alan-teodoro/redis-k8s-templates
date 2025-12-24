@@ -1,0 +1,15 @@
+# Example Vault Token Secret
+# Copy this file to vault-token.yaml and replace with your actual token
+#
+# DO NOT commit vault-token.yaml to git!
+# Add vault-token.yaml to .gitignore
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-token
+  namespace: redis
+type: Opaque
+stringData:
+  token: "YOUR_VAULT_TOKEN_HERE"
+

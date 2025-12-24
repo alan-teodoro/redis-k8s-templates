@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: redis-db-set
+  namespace: argocd
+spec:
+  generators:
+  - list:
+      elements:
+      - name: db1
+        valueFile: overlays/db1/values.yaml
+      - name: db2
+        valueFile: overlays/db2/values.yaml     
+  template:
+    metadata:
+      name: redis-{{name}}
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/alan-teodoro/poc-argocd
+        targetRevision: HEAD
+        path: charts/redis-database
+        helm:
+          valueFiles:
+          - '{{valueFile}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: redis
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

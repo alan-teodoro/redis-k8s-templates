@@ -1,0 +1,39 @@
+---
+# Enable user workload monitoring in OpenShift
+# This ConfigMap must be created in the openshift-monitoring namespace
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    enableUserWorkload: true
+
+---
+# ServiceMonitor for Redis Enterprise metrics
+# Deploy this in the same namespace as your Redis Enterprise Cluster
+# Update the namespace placeholders before applying
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-enterprise-metrics
+  namespace: redis-ns-a   # Change this to your REC namespace
+  labels:
+    app: redis-enterprise
+spec:
+  endpoints:
+    - interval: 15s
+      port: prometheus
+      scheme: https
+      path: /v2
+      tlsConfig:
+        insecureSkipVerify: true
+  namespaceSelector:
+    matchNames:
+      - redis-ns-a        # Change this to your REC namespace
+  selector:
+    matchLabels:
+      redis.io/service: prom-metrics
+

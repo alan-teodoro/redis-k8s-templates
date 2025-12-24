@@ -1,0 +1,18 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: route-ui
+  namespace: redis-ns-b
+spec:
+  path: ''
+  to:
+    name: rec-b-ui
+    weight: 100
+    kind: Service
+  host: ''
+  tls:
+    insecureEdgeTerminationPolicy: None
+    termination: passthrough
+  port:
+    targetPort: ui
+  alternateBackends: []

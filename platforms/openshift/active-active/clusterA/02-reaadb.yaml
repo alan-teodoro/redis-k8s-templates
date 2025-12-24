@@ -1,0 +1,15 @@
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseActiveActiveDatabase
+metadata:
+  name: reaadb-aadb
+  namespace: redis-ns-a
+spec:
+  globalConfigurations:    
+    memorySize: 200MB
+    shardCount: 1
+    databasePort: 12000
+    databaseSecretName: reaadb-aadb-secret
+    #replication: true
+  participatingClusters:
+      - name: rerc-a
+      - name: rerc-b
