@@ -1,0 +1,58 @@
+# Gateway Resource
+# This creates a LoadBalancer Service (AWS ELB) for external access
+#
+# The Gateway API separates infrastructure (Gateway) from routing (HTTPRoute)
+# This allows platform teams to manage infrastructure while app teams manage routing
+#
+# Reference: https://gateway-api.sigs.k8s.io/api-types/gateway/
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: redis-gateway
+  namespace: nginx-gateway
+  labels:
+    app: redis-gateway
+spec:
+  # GatewayClass defines which controller manages this Gateway
+  # The 'nginx' GatewayClass was created by NGINX Gateway Fabric
+  gatewayClassName: nginx
+  
+  # Listeners define how the Gateway accepts traffic
+  listeners:
+  
+  # HTTP listener (port 80)
+  # Redirects to HTTPS for security
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: All  # Allow routes from any namespace
+  
+  # HTTPS listener (port 443)
+  # Terminates TLS and forwards to backend
+  - name: https
+    protocol: HTTPS
+    port: 443
+    hostname: "*.redis.example.com"  # Accept all subdomains
+    allowedRoutes:
+      namespaces:
+        from: All
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        name: redis-tls-cert
+        namespace: nginx-gateway
+  
+  # TCP listener for Redis (port 6379)
+  # Note: TCPRoute requires experimental channel
+  # For now, we'll use HTTP/HTTPS for testing
+  # - name: redis-tcp
+  #   protocol: TCP
+  #   port: 6379
+  #   allowedRoutes:
+  #     namespaces:
+  #       from: All
+

@@ -1,0 +1,63 @@
+# ConfigMap with Redis Enterprise CA Certificate
+# This CA certificate is used to validate the backend TLS certificate
+# when connecting to rec-ui service (HTTPS on port 8443)
+#
+# IMPORTANT: This certificate must be extracted from your Redis Enterprise cluster
+# The certificate shown here is an EXAMPLE and will NOT work for your cluster.
+#
+# To extract the certificate for rec-ui (self-signed):
+# kubectl exec -n redis-enterprise rec-0 -c redis-enterprise-node -- \
+#   openssl s_client -connect rec-ui.redis-enterprise.svc.cluster.local:8443 -showcerts </dev/null 2>/dev/null | \
+#   sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/p' > rec-ui-cert.pem
+#
+# Then create this ConfigMap:
+# kubectl create configmap rec-backend-ca-cert \
+#   --from-file=ca.crt=rec-ui-cert.pem \
+#   -n redis-enterprise
+#
+# Or apply this file after updating the certificate below
+#
+# Reference: https://docs.nginx.com/nginx-gateway-fabric/traffic-security/secure-backend/
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rec-backend-ca-cert
+  namespace: redis-enterprise
+data:
+  ca.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIF7jCCA9agAwIBAgIBATANBgkqhkiG9w0BAQsFADBqMS8wLQYDVQQDDCZyZWMu
+    cmVkaXMtZW50ZXJwcmlzZS5zdmMuY2x1c3Rlci5sb2NhbDEQMA4GA1UECwwHcmVk
+    aXNkYjElMCMGA1UECgwcUmVkaXNMYWJzIEVudGVycHJpc2UgQ2x1c3RlcjAeFw0y
+    NTEyMjQxNDQ5MDhaFw0yNjEyMjQxNDQ5MDhaMGoxLzAtBgNVBAMMJnJlYy5yZWRp
+    cy1lbnRlcnByaXNlLnN2Yy5jbHVzdGVyLmxvY2FsMRAwDgYDVQQLDAdyZWRpc2Ri
+    MSUwIwYDVQQKDBxSZWRpc0xhYnMgRW50ZXJwcmlzZSBDbHVzdGVyMIICIjANBgkq
+    hkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAyRpS+Z4UCG5LDpUwpyrq7TaxzT7Hzp0m
+    B/xCmy6yqXglD2Bfzck26XbJq6zTSIic8oeQat3VdFMUuLMMI8L3IGWG649yvf+P
+    jprrow2atujwK0pSBEuOCiwxksY+2CeAUleCQxs4WHI002UUBMxbWhPuR0TzIlhm
+    EA5j7xTXBoOTy+XL78kPtCnC36N9yuE4/XHUlQgNY5gYcF3i/yrIGtnFFRPK7ttM
+    QH5KUULKnv6szMQ4Uff+GHDexRaHRAMRnec9ZPrChQQtUTV0XNW84ykc17VpkJ88
+    lkJRb0I39ygEON+HfT2vNPAflLEE5c/tM18wMqqtSvGXre9eNv4DY/0GX0iWGJBv
+    lAcrlFv1OZFnbM5Vz+6a5mpMK6eHo/fBdmRznWoDF5WiKBZxJMkQ0lYkL3LZ/sUz
+    E9erMa3D0R8URgS7FEUWPT2jRjMGp5A2+W+vcJusjs+pzukrCy/uGl7+HbrENBiw
+    MSrBQLa+pnOtViEG7uo02n2EhD0/scKmXF9qAKFzBK94m6dey5KpulO4oFt58DFI
+    VSaxnC4Z/qNwjPy8FWupEQ+okZPV6goKBsZ8Rq/gG0QjZySnTnTBnoeeYXrOH1/S
+    LA1cTwaUkj0FEpVKsr63ZZjnZxvV71Hcjv9WU4EW66q8aTfRp1nXdXEuTii6u31D
+    X5HsLsomRLECAwEAAaOBnjCBmzAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUH
+    AwIwWwYDVR0RBFQwUoImcmVjLnJlZGlzLWVudGVycHJpc2Uuc3ZjLmNsdXN0ZXIu
+    bG9jYWyCKCoucmVjLnJlZGlzLWVudGVycHJpc2Uuc3ZjLmNsdXN0ZXIubG9jYWww
+    HQYDVR0OBBYEFH3oMcCjWzMQOUecYPlUq4Xi+jYWMA0GCSqGSIb3DQEBCwUAA4IC
+    AQAwCMk6V14BXK3pvlbo1YRtd2QDq6BfApaQlyijfWjDROejWAecAv1/0k0GgcuA
+    0kxYA8NtDgId45fV3q1yzIUsLNqs1KGREP+zAKzNDe2iiuO2rjxS6tNX8sdhtWmR
+    hR7jue9J9dcdPorTyYQgdp2FiDfVWH+jmoBw1QDb3r86+81u+2i8tCf5j3OzB42C
+    PupO3TmeWaloDhFtJB+FFeWNMeMo+ldp1DsuHXm4pZsSnvftC52YH8O7c5TWdxG2
+    62c7fRq0uIdLoHHs9kYXn+y5/ZfT2PlutZZmRXcehZ5E3y11gAQffDoZxg/HOrxE
+    UfHs2j+Pz+mpgQV9n01uopbUj3Y1nm2lJHT596BcE0cei1niVGDzRvsi9cegLuzj
+    6csnHY8PhLA6ufO7OgO/NsgRNBfrRzKxColC8e4Wixav/NuEcaMogawhLV0YD3rL
+    2sU59baN5wL1jHeKjvNkerk1x7HycecW9CNHJL2N0Gh52cIKPVpLX6Cbo3msjnLn
+    5J48oTOqprait9uBMOMbMgxqzrZLHp11CxHvqiNRwCGiTYhbogtkQ5ikWW5q8iaV
+    gHh/ZOfTE/9ut2UUZmHi0iIsBG3LnSE3ieAu7oOV1qAp3Asa5EBB9augeswsdpck
+    WToKnVSC0tTzjWt67z2OvHwiygXVAC5P3juPpo2OrJ7CoA==
+    -----END CERTIFICATE-----
+

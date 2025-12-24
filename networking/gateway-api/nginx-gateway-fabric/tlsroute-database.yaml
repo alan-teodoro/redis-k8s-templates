@@ -1,0 +1,55 @@
+# TLSRoute for Redis Database (TLS Passthrough)
+# Routes TLS traffic directly to Redis database without terminating TLS
+#
+# ⚠️ REQUIRES EXPERIMENTAL CHANNEL
+# This resource is part of the Gateway API Experimental Channel
+# Install with: kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/experimental-install.yaml
+#
+# TLSRoute provides TLS passthrough (similar to NGINX Ingress ssl-passthrough annotation)
+# The Gateway routes based on SNI (Server Name Indication) without decrypting traffic
+#
+# Reference: https://gateway-api.sigs.k8s.io/api-types/tlsroute/
+
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: redis-db-tls-route
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: database
+spec:
+  # Reference to the Gateway (cross-namespace)
+  parentRefs:
+  - name: redis-gateway
+    namespace: nginx-gateway
+    sectionName: tls-passthrough  # Use TLS listener (not HTTPS!)
+  
+  # Hostnames for SNI-based routing
+  # Redis client must connect with SNI enabled
+  hostnames:
+  - "db.redis.example.com"
+  
+  # Routing rules
+  rules:
+  
+  # Route all TLS traffic to the database service
+  - backendRefs:
+    - name: test-db
+      port: 11909
+      weight: 100
+
+---
+# NOTE: Gateway needs a TLS listener for passthrough
+# Add this listener to gateway.yaml:
+#
+# listeners:
+# - name: tls-passthrough
+#   protocol: TLS
+#   port: 6379
+#   tls:
+#     mode: Passthrough  # ← Key difference from HTTPS (Terminate)
+#   allowedRoutes:
+#     namespaces:
+#       from: All
+

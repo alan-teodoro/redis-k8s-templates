@@ -1,0 +1,65 @@
+# HTTPRoute Resource
+# Routes HTTP/HTTPS traffic from the Gateway to Redis Enterprise database
+#
+# HTTPRoute is namespace-scoped and can reference backends in the same namespace
+# For cross-namespace routing, use ReferenceGrant
+#
+# Reference: https://gateway-api.sigs.k8s.io/api-types/httproute/
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: redis-route
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  # Reference to the Gateway (cross-namespace)
+  parentRefs:
+  - name: redis-gateway
+    namespace: nginx-gateway
+    sectionName: https  # Use HTTPS listener
+  
+  # Hostnames this route responds to
+  # Update with your actual domain
+  hostnames:
+  - "redis.example.com"
+  - "*.redis.example.com"
+  
+  # Routing rules
+  rules:
+  
+  # Route all traffic to the database service
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: test-db
+      port: 11909
+      weight: 100
+
+---
+# ReferenceGrant
+# Allows HTTPRoute in redis-enterprise namespace to reference Gateway in nginx-gateway namespace
+#
+# This is required for cross-namespace references in Gateway API
+# Reference: https://gateway-api.sigs.k8s.io/api-types/referencegrant/
+
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-redis-routes
+  namespace: nginx-gateway
+spec:
+  # Allow HTTPRoutes from redis-enterprise namespace
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: redis-enterprise
+  
+  # To reference Gateways in nginx-gateway namespace
+  to:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+

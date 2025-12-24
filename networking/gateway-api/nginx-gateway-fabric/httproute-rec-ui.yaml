@@ -1,0 +1,47 @@
+# HTTPRoute for Redis Enterprise Cluster UI
+# Routes HTTPS traffic to the REC management UI
+#
+# This demonstrates HTTPRoute with backend TLS (HTTPS backend)
+# The Gateway terminates client TLS and re-encrypts to backend HTTPS
+#
+# Flow:
+# Client --HTTPS--> Gateway --HTTPS--> rec-ui:8443
+#
+# BackendTLSPolicy is required to validate the backend certificate
+#
+# Reference: https://gateway-api.sigs.k8s.io/api-types/httproute/
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: rec-ui-route
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: ui
+spec:
+  # Reference to the Gateway (cross-namespace)
+  parentRefs:
+  - name: redis-gateway
+    namespace: nginx-gateway
+    sectionName: https  # Use HTTPS listener
+
+  # Hostnames this route responds to
+  # Update with your actual domain
+  hostnames:
+  - "ui.redis.example.com"
+
+  # Routing rules
+  rules:
+
+  # Route all traffic to the REC UI service (HTTPS port 8443)
+  # Gateway terminates client TLS, validates backend TLS, forwards HTTPS
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: rec-ui
+      port: 8443
+      weight: 100
+

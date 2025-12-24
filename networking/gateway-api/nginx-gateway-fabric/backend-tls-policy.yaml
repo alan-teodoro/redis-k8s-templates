@@ -1,0 +1,34 @@
+# BackendTLSPolicy for REC UI
+# Configures how the Gateway connects to HTTPS backends
+#
+# This policy tells NGINX Gateway Fabric to:
+# 1. Connect to rec-ui service via HTTPS (port 8443)
+# 2. Validate the backend certificate using the REC CA certificate
+# 3. Use the correct hostname for SNI
+#
+# Reference: https://docs.nginx.com/nginx-gateway-fabric/traffic-security/secure-backend/
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: rec-ui-backend-tls
+  namespace: redis-enterprise
+spec:
+  # Target the rec-ui service
+  targetRefs:
+  - group: ""
+    kind: Service
+    name: rec-ui
+
+  # Validation settings
+  validation:
+    # CA certificate to validate backend certificate
+    caCertificateRefs:
+    - name: rec-backend-ca-cert
+      group: ""
+      kind: ConfigMap
+
+    # Hostname for SNI and certificate validation
+    # This must match the CN in the backend certificate
+    hostname: rec.redis-enterprise.svc.cluster.local
+
