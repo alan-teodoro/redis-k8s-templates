@@ -2,28 +2,33 @@
 
 This guide provides the **correct sequence** for deploying Redis Enterprise on Kubernetes.
 
-Each section references detailed documentation for more information.
+---
+
+## Choose Your Platform
+
+Select your Kubernetes platform for platform-specific setup:
+
+- **Amazon EKS:** [platforms/eks/README.md](platforms/eks/README.md)
+- **Google GKE:** [platforms/gke/README.md](platforms/gke/README.md)
+- **Azure AKS:** [platforms/aks/README.md](platforms/aks/README.md)
+- **Red Hat OpenShift:** [platforms/openshift/README.md](platforms/openshift/README.md)
+- **Vanilla Kubernetes:** [platforms/vanilla/README.md](platforms/vanilla/README.md)
 
 ---
 
-## Prerequisites
+## Generic Installation Order
 
-- ✅ Kubernetes cluster running (EKS, GKE, AKS, or on-premises)
-- ✅ `kubectl` configured and connected to cluster
-- ✅ `helm` installed (v3.x)
-- ✅ Cluster admin permissions
+Follow this order for any Kubernetes platform:
 
----
+### 1. Platform-Specific Setup (5-10 min) 🔧
 
-## Installation Order
+Configure platform-specific requirements:
 
-### 1. Storage Configuration (5 min) 📦
-
-**See:** [platforms/eks/storage/README.md](platforms/eks/storage/README.md)
-
-Follow the instructions in the README to configure storage for your platform.
-
-**For other platforms:** Check `platforms/<your-platform>/storage/`
+- **EKS:** Storage (EBS CSI, gp3) → [platforms/eks/storage/README.md](platforms/eks/storage/README.md)
+- **GKE:** Storage (GCE PD) → [platforms/gke/storage/README.md](platforms/gke/storage/README.md)
+- **AKS:** Storage (Azure Disk) → [platforms/aks/storage/README.md](platforms/aks/storage/README.md)
+- **OpenShift:** SCC → [platforms/openshift/scc/README.md](platforms/openshift/scc/README.md)
+- **Vanilla:** Ensure storage class available
 
 ---
 
@@ -31,43 +36,42 @@ Follow the instructions in the README to configure storage for your platform.
 
 **See:** [operator/README.md](operator/README.md)
 
-Follow the installation instructions in the README.
+Generic operator installation (works on all platforms).
 
 ---
 
 ### 3. Redis Enterprise Cluster & Database (20 min) 🗄️
 
-**See:** [examples/basic-deployment/README.md](examples/basic-deployment/README.md)
+**See:** [deployments/single-region/README.md](deployments/single-region/README.md)
 
-Follow the deployment instructions in the README to:
+Generic deployment (works on all platforms):
 1. Deploy Redis Enterprise Cluster (REC)
 2. Create test database (REDB)
 
 ---
 
-### 4. Monitoring (Optional - 15 min) 📊
+### 4. Networking (Optional - 20 min) 🌐
+
+Configure external access based on your platform:
+
+- **Generic (EKS/GKE/AKS/Vanilla):** [networking/gateway-api/nginx-gateway-fabric/README.md](networking/gateway-api/nginx-gateway-fabric/README.md)
+- **OpenShift:** [platforms/openshift/routes/README.md](platforms/openshift/routes/README.md)
+
+---
+
+### 5. Monitoring (Optional - 15 min) 📊
 
 **See:** [monitoring/prometheus/README.md](monitoring/prometheus/README.md)
 
-Follow the monitoring setup instructions in the README.
+Generic monitoring setup (works on all platforms).
 
 ---
 
-### 5. Admission Controller (Optional - 5 min) ✅
+### 6. Admission Controller (Optional - 5 min) ✅
 
 **See:** [operator/configuration/admission-controller/README.md](operator/configuration/admission-controller/README.md)
 
-Follow the admission controller setup instructions in the README.
-
----
-
-### 6. Networking - Gateway API (Optional - 20 min) 🌐
-
-**See:** [networking/gateway-api/nginx-gateway-fabric/README.md](networking/gateway-api/nginx-gateway-fabric/README.md)
-
-Follow the Gateway API setup instructions in the README for:
-- REC UI access via HTTPRoute (HTTPS with TLS termination)
-- Database access via TLSRoute (TLS passthrough)
+Generic admission controller setup (works on all platforms).
 
 ---
 
@@ -105,7 +109,8 @@ kubectl get svc -n redis-enterprise
 
 See individual component READMEs for detailed troubleshooting:
 - [Operator](operator/README.md#troubleshooting)
-- [Deployment](examples/basic-deployment/README.md#troubleshooting)
+- [Deployment](deployments/single-region/README.md#troubleshooting)
 - [Monitoring](monitoring/prometheus/README.md#troubleshooting)
 - [Networking](networking/gateway-api/nginx-gateway-fabric/README.md#troubleshooting)
+- [Platform-Specific](platforms/)
 

@@ -58,9 +58,9 @@ kubectl get crd | grep redis
 
 ## 3. Redis Enterprise Cluster ✅
 
-**Follow:** [examples/basic-deployment/README.md](examples/basic-deployment/README.md)
+**Follow:** [deployments/single-region/README.md](deployments/single-region/README.md)
 
-- [ ] REC deployed (`rec-basic.yaml`)
+- [ ] REC deployed (`02-rec.yaml`)
 - [ ] Waited for ready condition (5-10 min)
 - [ ] 3 REC pods running
 - [ ] Admin password retrieved
@@ -81,9 +81,9 @@ kubectl get secret rec -n redis-enterprise -o jsonpath='{.data.password}' | base
 
 ## 4. Test Database ✅
 
-**Follow:** [examples/basic-deployment/README.md](examples/basic-deployment/README.md)
+**Follow:** [deployments/single-region/README.md](deployments/single-region/README.md)
 
-- [ ] REDB deployed (`redb-test.yaml`)
+- [ ] REDB deployed (`03-redb.yaml`)
 - [ ] Database ready
 - [ ] TLS enabled (`tlsMode: enabled`)
 - [ ] Database password retrieved
