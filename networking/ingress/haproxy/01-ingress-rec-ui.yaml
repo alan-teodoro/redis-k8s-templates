@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rec-ui
+  namespace: redis-enterprise
+  annotations:
+    # HAProxy-specific annotations
+    haproxy-ingress.github.io/backend-protocol: "h1-ssl"
+    haproxy-ingress.github.io/secure-backends: "true"
+    haproxy-ingress.github.io/secure-verify-ca-secret: "false"
+    
+    # Timeouts
+    haproxy-ingress.github.io/timeout-client: "600s"
+    haproxy-ingress.github.io/timeout-server: "600s"
+spec:
+  ingressClassName: haproxy
+  
+  rules:
+    # ⚠️ UPDATE THIS HOSTNAME FOR YOUR ENVIRONMENT
+    - host: rec-ui.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rec-ui
+                port:
+                  number: 8443
+

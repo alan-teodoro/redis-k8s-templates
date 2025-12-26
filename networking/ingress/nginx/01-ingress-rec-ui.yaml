@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rec-ui
+  namespace: redis-enterprise
+  annotations:
+    # NGINX-specific annotations
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/ssl-passthrough: "false"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    
+    # Handle self-signed certificates from REC
+    nginx.ingress.kubernetes.io/proxy-ssl-verify: "false"
+    nginx.ingress.kubernetes.io/proxy-ssl-protocols: "TLSv1.2 TLSv1.3"
+    
+    # Timeouts for long-running operations
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+spec:
+  ingressClassName: nginx
+  
+  # TLS configuration (optional - for custom domain)
+  # tls:
+  #   - hosts:
+  #       - rec-ui.example.com
+  #     secretName: rec-ui-tls
+  
+  rules:
+    # ⚠️ UPDATE THIS HOSTNAME FOR YOUR ENVIRONMENT
+    - host: rec-ui.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rec-ui
+                port:
+                  number: 8443
+

@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx-controller
+  namespace: ingress-nginx
+spec:
+  type: LoadBalancer
+  ports:
+    # Default HTTP/HTTPS ports
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: http
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: https
+    
+    # Database ports (TCP passthrough)
+    # Add one entry for each database
+    
+    - name: redis-test-db
+      port: 12000
+      protocol: TCP
+      targetPort: 12000
+    
+    # Uncomment and add more databases as needed:
+    # - name: redis-cache-db
+    #   port: 12001
+    #   protocol: TCP
+    #   targetPort: 12001
+    #
+    # - name: redis-session-db
+    #   port: 12002
+    #   protocol: TCP
+    #   targetPort: 12002
+

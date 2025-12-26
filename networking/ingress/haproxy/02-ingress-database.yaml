@@ -1,0 +1,38 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: redis-database
+  namespace: redis-enterprise
+  annotations:
+    # Enable SSL passthrough for TLS databases
+    haproxy-ingress.github.io/ssl-passthrough: "true"
+    haproxy-ingress.github.io/ssl-passthrough-http-port: "12000"
+spec:
+  ingressClassName: haproxy
+  
+  rules:
+    # ⚠️ UPDATE THESE HOSTNAMES FOR YOUR ENVIRONMENT
+    # Database: test-db
+    - host: db-test.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: test-db
+                port:
+                  number: 12000
+    
+    # Add more databases as needed:
+    # - host: db-cache.example.com
+    #   http:
+    #     paths:
+    #       - path: /
+    #         pathType: Prefix
+    #         backend:
+    #           service:
+    #             name: cache-db
+    #             port:
+    #               number: 12001
+
