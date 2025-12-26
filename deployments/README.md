@@ -27,7 +27,28 @@ Standard Redis Enterprise deployment in a single Kubernetes cluster.
 
 ---
 
-### 2. Production (Recommended for Production)
+### 2. Active-Active (Multi-Region)
+
+**See:** [active-active/README.md](active-active/README.md)
+
+Active-Active deployment across two Kubernetes clusters for geo-distribution.
+
+**Use cases:**
+- Multi-region deployments
+- Global applications requiring low latency
+- Disaster recovery with active-active replication
+- Applications requiring local read/write in multiple regions
+
+**Features:**
+- Geo-distributed databases with CRDT
+- Bi-directional replication
+- Local read/write in each region
+- Automatic conflict resolution
+- High availability across regions
+
+---
+
+### 3. Production (Recommended for Production)
 
 **See:** [production/README.md](production/README.md)
 

@@ -1,0 +1,36 @@
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseRemoteCluster
+metadata:
+  name: rerc-a
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  recName: rec-a
+  recNamespace: redis-enterprise
+  
+  # ⚠️ UPDATE THESE FQDNs FOR YOUR CLUSTER A ENVIRONMENT
+  apiFqdnUrl: api-rec-a.redis.example.com
+  dbFqdnSuffix: .db-rec-a.redis.example.com
+  
+  secretName: redis-enterprise-rerc-a
+
+---
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseRemoteCluster
+metadata:
+  name: rerc-b
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  recName: rec-b
+  recNamespace: redis-enterprise
+  
+  # ⚠️ UPDATE THESE FQDNs FOR YOUR CLUSTER B ENVIRONMENT
+  apiFqdnUrl: api-rec-b.redis.example.com
+  dbFqdnSuffix: .db-rec-b.redis.example.com
+  
+  secretName: redis-enterprise-rerc-b
+

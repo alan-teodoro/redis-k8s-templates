@@ -1,0 +1,33 @@
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-a
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  nodes: 3
+  username: admin@redis.com
+  
+  # ⚠️ UPDATE THESE FQDNs FOR YOUR ENVIRONMENT
+  # See README.md for configuration instructions
+  ingressOrRouteSpec:
+    apiFqdnUrl: api-rec-a.redis.example.com
+    dbFqdnSuffix: .db-rec-a.redis.example.com
+  
+  persistentSpec:
+    enabled: true
+    volumeSize: 10Gi
+    # storageClassName: gp3  # Uncomment and set for your platform
+  
+  redisEnterpriseNodeResources:
+    requests:
+      cpu: 2
+      memory: 4Gi
+    limits:
+      cpu: 2
+      memory: 4Gi
+  
+  # Rack awareness for multi-AZ distribution
+  rackAwarenessNodeLabel: topology.kubernetes.io/zone
+
