@@ -1,197 +1,191 @@
-# Redis Enterprise on OpenShift - Deployment Templates
+# Redis Enterprise on OpenShift
 
-Professional deployment templates and guides for Redis Enterprise on OpenShift, designed for consultants and enterprise customers.
-
-## 📋 Overview
-
-This repository provides production-ready YAML configurations and step-by-step guides for deploying Redis Enterprise on OpenShift in two deployment patterns:
-
-- **Single-Region**: Standard Redis Enterprise deployment in a single OpenShift cluster
-- **Active-Active**: Geo-distributed Redis Enterprise deployment across multiple OpenShift clusters with conflict-free replication
-
-## 🏗️ Architecture Patterns
-
-### Single-Region Deployment
-A Redis Enterprise Cluster (REC) deployed in a single OpenShift cluster with one or more Redis databases. Ideal for:
-- Single data center deployments
-- Development and testing environments
-- Applications requiring high availability within a single region
-
-### Active-Active Deployment
-Redis Enterprise clusters deployed across multiple OpenShift clusters with Active-Active databases providing:
-- Geo-distributed writes with conflict-free replication (CRDT)
-- Local read/write latency in each region
-- Automatic conflict resolution
-- Disaster recovery and business continuity
-
-## 📁 Repository Structure
-
-```
-.
-├── README.md                          # This file
-├── single-region/                     # Single cluster deployment
-│   ├── README.md                      # Single-region guide
-│   ├── 00-namespace.yaml              # Namespace creation
-│   ├── 00-rec-admin-secret.yaml       # Admin credentials
-│   ├── 01-rec.yaml                    # Redis Enterprise Cluster
-│   ├── 02-redb-secret.yaml            # Database credentials
-│   ├── 03-redb.yaml                   # Redis Database
-│   ├── 04-route-ui.yaml               # UI access route
-│   ├── 05-route-db.yaml               # Database access route
-│   └── steps.txt                      # Deployment steps
-├── active-active/                     # Multi-cluster deployment
-│   ├── README.md                      # Active-Active guide
-│   ├── clusterA/                      # Cluster A configurations
-│   ├── clusterB/                      # Cluster B configurations
-│   └── steps.txt                      # Deployment steps
-├── monitoring/                        # Monitoring configuration
-│   └── servicemonitor.yaml            # Prometheus ServiceMonitor
-├── testing/                           # Load testing tools
-│   └── memtier-benchmark.yaml         # Memtier benchmark pod
-└── openshift/                         # OpenShift-specific configs
-    └── scc.yaml                       # Security Context Constraints
-```
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-1. **OpenShift Cluster(s)**
-   - OpenShift 4.10+ (see [supported distributions](https://redis.io/docs/latest/operate/kubernetes/reference/supported_k8s_distributions/))
-   - Cluster admin access
-   - Sufficient resources (see [sizing guide](#resource-requirements))
-
-2. **Redis Enterprise Operator**
-   - Install from OperatorHub or manually
-   - Version 7.4.2+ recommended
-
-3. **Storage**
-   - Persistent storage class available
-   - Minimum 20Gi per Redis Enterprise node
-
-4. **Network**
-   - OpenShift Routes enabled (default)
-   - External DNS configured (for production)
-
-### Single-Region Deployment (5 minutes)
-
-```bash
-# 1. Create namespace
-oc apply -f single-region/00-namespace.yaml
-
-# 2. Install Redis Enterprise Operator (if not already installed)
-# Via OperatorHub UI or:
-oc apply -f openshift/operator-install.yaml
-
-# 3. Apply configurations in order
-oc apply -f single-region/00-rec-admin-secret.yaml
-oc apply -f single-region/01-rec.yaml
-
-# 4. Wait for cluster to be ready (3-5 minutes)
-oc wait --for=condition=Ready rec/rec -n redis-ns-a --timeout=600s
-
-# 5. Create database
-oc apply -f single-region/02-redb-secret.yaml
-oc apply -f single-region/03-redb.yaml
-
-# 6. Create routes for access
-oc apply -f single-region/04-route-ui.yaml
-oc apply -f single-region/05-route-db.yaml
-
-# 7. Get UI URL
-oc get route route-ui -n redis-ns-a -o jsonpath='{.spec.host}'
-```
-
-**Default Credentials:**
-- Username: `admin@redis.com`
-- Password: `RedisAdmin123!` (⚠️ Change in production!)
-
-### Active-Active Deployment
-
-See [active-active/README.md](active-active/README.md) for detailed multi-cluster setup instructions.
-
-## 📊 Resource Requirements
-
-### Minimum Requirements (Development/Testing)
-- **Nodes**: 3 Redis Enterprise nodes
-- **CPU**: 2 cores per node (6 cores total)
-- **Memory**: 4Gi per node (12Gi total)
-- **Storage**: 20Gi per node (60Gi total)
-
-### Production Recommendations
-- **Nodes**: 3-9 nodes (odd number for quorum)
-- **CPU**: 4-8 cores per node
-- **Memory**: 16-32Gi per node
-- **Storage**: 100Gi+ per node with high IOPS
-- **Network**: Low latency between nodes (<1ms)
-
-See [Redis Enterprise sizing guide](https://redis.io/docs/latest/operate/kubernetes/7.8.4/recommendations/sizing-on-kubernetes/) for detailed calculations.
-
-## 🔐 Security Best Practices
-
-1. **Change Default Passwords**: Update all secrets before production deployment
-2. **Enable TLS**: Set `tlsMode: enabled` in database configurations
-3. **Use RBAC**: Implement role-based access control
-4. **Network Policies**: Restrict traffic between namespaces
-5. **Secret Management**: Use OpenShift sealed secrets or external secret managers
-6. **Regular Updates**: Keep operator and Redis Enterprise versions current
-
-## 📈 Monitoring & Observability
-
-Enable Prometheus monitoring:
-
-```bash
-# Enable user workload monitoring
-oc apply -f monitoring/servicemonitor.yaml
-
-# Access metrics in OpenShift Console
-# Observe → Metrics → Custom Query
-```
-
-Common metrics to monitor:
-- `redis_used_memory_bytes` - Memory usage
-- `redis_connected_clients` - Active connections
-- `redis_commands_processed_total` - Operations per second
-- `redis_keyspace_hits_total` / `redis_keyspace_misses_total` - Cache hit ratio
-
-## 🧪 Load Testing
-
-Deploy memtier_benchmark for performance testing:
-
-```bash
-# Deploy memtier pod
-oc apply -f testing/memtier-benchmark.yaml
-
-# Run benchmark (TLS enabled)
-oc exec -it memtier-shell -- memtier_benchmark \
-  -s <db-service-dns> -p <port> -a <password> \
-  --tls --tls-skip-verify --sni <db-service-dns> \
-  --ratio=1:4 --test-time=600 --pipeline=2 \
-  --clients=2 --threads=2 --hide-histogram
-```
-
-See [testing/README.md](testing/README.md) for detailed benchmarking guide.
-
-## 📚 Additional Resources
-
-- [Redis Enterprise on Kubernetes Documentation](https://redis.io/docs/latest/operate/kubernetes/)
-- [OpenShift Deployment Guide](https://redis.io/docs/latest/operate/kubernetes/deployment/openshift/)
-- [API Reference](https://redis.io/docs/latest/operate/kubernetes/reference/api/)
-- [Hardware Requirements](https://redis.io/docs/latest/operate/rs/installing-upgrading/install/plan-deployment/hardware-requirements/)
-- [Persistent Volumes Best Practices](https://redis.io/docs/latest/operate/kubernetes/7.8.4/recommendations/persistent-volumes/)
-
-## 🤝 Support
-
-For issues and questions:
-- Redis Enterprise Support Portal
-- [Redis Community Forum](https://forum.redis.com/)
-- OpenShift Support (for platform issues)
-
-## 📝 License
-
-This repository contains deployment templates and is provided as-is for Redis Enterprise customers and partners.
+Redis Enterprise deployment guide for Red Hat OpenShift.
 
 ---
 
-**Note**: This is a template repository. Always review and customize configurations for your specific environment before production deployment.
+## Overview
+
+OpenShift-specific configurations and guides for deploying Redis Enterprise.
+
+**Key Differences from Generic Kubernetes:**
+- Uses **Routes** instead of Ingress/Gateway API (native)
+- Requires **Security Context Constraints (SCC)**
+- Integrated with OpenShift monitoring and logging
+
+---
+
+## Directory Structure
+
+```
+platforms/openshift/
+├── README.md                   # This file
+├── scc/                        # Security Context Constraints (OpenShift-specific)
+│   ├── README.md
+│   └── redis-scc.yaml
+├── routes/                     # Routes for external access (OpenShift-specific)
+│   ├── README.md
+│   ├── route-ui.yaml
+│   └── route-db.yaml
+└── active-active/              # Multi-cluster Active-Active (OpenShift-specific)
+    ├── README.md
+    ├── clusterA/
+    └── clusterB/
+```
+
+**Generic configurations** (used by all platforms including OpenShift):
+- **Operator:** [../../operator/README.md](../../operator/README.md)
+- **Deployments:** [../../deployments/single-region/README.md](../../deployments/single-region/README.md)
+- **Monitoring:** [../../monitoring/prometheus/README.md](../../monitoring/prometheus/README.md)
+- **Security:** [../../security/README.md](../../security/README.md)
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- OpenShift 4.10+ cluster
+- Cluster admin access (`oc` configured)
+- Default storage class available
+
+### Installation Steps
+
+#### 1. Apply SCC (OpenShift-Specific)
+
+**See:** [scc/README.md](scc/README.md)
+
+```bash
+oc apply -f scc/redis-scc.yaml
+```
+
+#### 2. Install Operator (Generic)
+
+**See:** [../../operator/README.md](../../operator/README.md)
+
+Install via OperatorHub or Helm:
+
+```bash
+helm repo add redis https://helm.redis.io
+helm install redis-operator redis/redis-enterprise-operator \
+  --version 8.0.6-8 \
+  -n redis-enterprise \
+  --create-namespace
+```
+
+#### 3. Deploy Cluster & Database (Generic)
+
+**See:** [../../deployments/single-region/README.md](../../deployments/single-region/README.md)
+
+```bash
+# Create namespace
+oc apply -f ../../deployments/single-region/00-namespace.yaml
+
+# Apply RBAC
+oc apply -f ../../deployments/single-region/01-rbac-rack-awareness.yaml
+
+# Deploy REC
+oc apply -f ../../deployments/single-region/02-rec.yaml
+
+# Wait for ready
+oc wait --for=condition=Ready rec/rec -n redis-enterprise --timeout=600s
+
+# Create database
+oc apply -f ../../deployments/single-region/03-redb.yaml
+```
+
+#### 4. Create Routes (OpenShift-Specific)
+
+**See:** [routes/README.md](routes/README.md)
+
+```bash
+# UI access
+oc apply -f routes/route-ui.yaml
+
+# Database access (optional)
+oc apply -f routes/route-db.yaml
+
+# Get UI URL
+oc get route route-ui -n redis-enterprise -o jsonpath='{.spec.host}'
+```
+
+#### 5. Access REC UI
+
+```bash
+# Get URL
+UI_URL=$(oc get route route-ui -n redis-enterprise -o jsonpath='{.spec.host}')
+
+# Get password
+PASSWORD=$(oc get secret rec -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d)
+
+# Open browser
+echo "URL: https://$UI_URL"
+echo "User: demo@redis.com"
+echo "Pass: $PASSWORD"
+```
+
+---
+
+## Active-Active Deployment
+
+**See:** [active-active/README.md](active-active/README.md)
+
+Multi-cluster geo-distributed deployment with conflict-free replication.
+
+---
+
+## Monitoring (Optional)
+
+**See:** [../../monitoring/prometheus/README.md](../../monitoring/prometheus/README.md)
+
+Standard Prometheus monitoring works on OpenShift.
+
+OpenShift-specific: Use built-in monitoring or deploy kube-prometheus-stack.
+
+---
+
+## Testing (Optional)
+
+**See:** [../../testing/benchmarking/README.md](../../testing/benchmarking/README.md)
+
+Standard benchmarking tools work on OpenShift.
+
+---
+
+## OpenShift-Specific Features
+
+### Routes vs Ingress/Gateway API
+
+OpenShift uses **Routes** (native) instead of Kubernetes Ingress or Gateway API.
+
+**Advantages:**
+- ✅ No additional installation required
+- ✅ Integrated with OpenShift Router
+- ✅ Automatic TLS termination
+- ✅ Simple configuration
+
+**See:** [routes/README.md](routes/README.md)
+
+### Security Context Constraints (SCC)
+
+OpenShift requires SCC for pod security instead of Pod Security Policies/Standards.
+
+**See:** [scc/README.md](scc/README.md)
+
+### Integrated Monitoring
+
+OpenShift includes built-in monitoring. You can use:
+- OpenShift built-in Prometheus
+- Custom kube-prometheus-stack deployment
+
+**See:** [../../monitoring/prometheus/README.md](../../monitoring/prometheus/README.md)
+
+---
+
+## References
+
+- [Redis Enterprise on Kubernetes](https://redis.io/docs/latest/operate/kubernetes/)
+- [Redis Enterprise on OpenShift](https://redis.io/docs/latest/operate/kubernetes/deployment/openshift/)
+- [OpenShift Routes](https://docs.openshift.com/container-platform/latest/networking/routes/route-configuration.html)
+- [OpenShift SCC](https://docs.openshift.com/container-platform/latest/authentication/managing-security-context-constraints.html)
 
