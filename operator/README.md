@@ -12,8 +12,9 @@ kubectl create namespace redis-enterprise
 helm repo add redis https://helm.redis.io
 helm repo update
 
-# Install operator
+# Install operator (specify version for consistency)
 helm install redis-operator redis/redis-enterprise-operator \
+  --version 8.0.6-8 \
   -n redis-enterprise
 
 # Verify
@@ -23,8 +24,10 @@ kubectl get crd | grep redis
 
 ### RBAC for Rack Awareness (Multi-AZ)
 
+Required for multi-AZ deployments to enable rack awareness.
+
 ```bash
-kubectl apply -f installation/helm/rbac-rack-awareness.yaml
+kubectl apply -f ../examples/basic-deployment/rbac-rack-awareness.yaml
 ```
 
 ---

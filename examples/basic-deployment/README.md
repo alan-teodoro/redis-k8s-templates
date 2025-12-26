@@ -57,9 +57,20 @@ echo
 ## Test Connectivity
 
 ```bash
-# Test database
+# Get database port
+DB_PORT=$(kubectl get redb test-db -n redis-enterprise -o jsonpath='{.status.databasePort}')
+echo "Database Port: $DB_PORT"
+
+# Get database password
+DB_PASSWORD=$(kubectl get secret redb-test-db -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d)
+
+# Test database (internal - no TLS)
 kubectl run -it --rm redis-test --image=redis:latest --restart=Never -- \
-  redis-cli -h test-db.redis-enterprise.svc.cluster.local -p 11909 PING
+  redis-cli -h test-db.redis-enterprise.svc.cluster.local -p $DB_PORT -a $DB_PASSWORD PING
+
+# Test database (with TLS enabled)
+kubectl run -it --rm redis-test --image=redis:latest --restart=Never -- \
+  redis-cli -h test-db.redis-enterprise.svc.cluster.local -p $DB_PORT --tls --insecure -a $DB_PASSWORD PING
 ```
 
 ---

@@ -71,7 +71,6 @@ GATEWAY_IP=$(dig +short $GATEWAY_HOSTNAME | head -1)
 ### 4. Create BackendTLSPolicy
 
 ```bash
-kubectl apply -f backend-tls-configmap.yaml
 kubectl apply -f backend-tls-policy.yaml
 ```
 
