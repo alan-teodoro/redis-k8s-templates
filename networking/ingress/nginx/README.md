@@ -8,25 +8,86 @@ This configuration uses the NGINX Ingress Controller to provide external access 
 - **REC UI** (port 8443) - HTTPS with TLS termination
 - **Redis Databases** (port 12000+) - TCP with TLS passthrough
 
+## 📖 How It Works
+
+NGINX Ingress handles **two different types of traffic**:
+
+### 1. **HTTP/HTTPS Traffic (REC UI)** ✅ Uses Ingress Resource
+- Protocol: HTTP/HTTPS
+- Configuration: Kubernetes `Ingress` resource
+- File: `01-ingress-rec-ui.yaml` ← **You need this file**
+- Routing: Based on hostname (`rec-ui.example.com`)
+- Port: 443 (HTTPS)
+
+### 2. **TCP Traffic (Databases)** ✅ Uses Helm Values (NO Ingress!)
+- Protocol: TCP (raw Redis protocol)
+- Configuration: Helm values (`--set tcp.PORT=...`)
+- File: **NONE** ← **No YAML file needed!**
+- Routing: Based on port (12000, 12001, etc.)
+- Ports: 12000+ (configurable)
+
+**🔑 Key Difference:**
+- **REC UI** = Ingress YAML file required
+- **Databases** = Just Helm values, no YAML file!
+
+**What Helm does automatically for databases:**
+
+When you run:
+```bash
+helm install ingress-nginx ... --set tcp.12000="redis-enterprise/test-db:10414"
+```
+
+Helm automatically creates:
+
+1. **ConfigMap** `tcp-services`:
+   ```yaml
+   apiVersion: v1
+   kind: ConfigMap
+   metadata:
+     name: tcp-services
+     namespace: ingress-nginx
+   data:
+     "12000": "redis-enterprise/test-db:10414"
+   ```
+
+2. **Updates LoadBalancer Service** to expose port 12000:
+   ```yaml
+   ports:
+     - port: 12000
+       targetPort: 12000
+       protocol: TCP
+   ```
+
+3. **Configures NGINX** to proxy TCP traffic from port 12000 to the database service
+
+**You don't need to create any YAML files for databases!**
+
 ## 🏗️ Architecture
 
 ```
-                                    ┌─────────────────────────────┐
-                                    │   NGINX Ingress Controller  │
-                                    │   (LoadBalancer Service)    │
-                                    └──────────┬──────────────────┘
+                                    ┌─────────────────────────────────────┐
+                                    │   NGINX Ingress Controller          │
+                                    │   (LoadBalancer Service)            │
+                                    │   Ports: 80, 443, 12000, 12001...   │
+                                    └──────────┬──────────────────────────┘
                                                │
                     ┌──────────────────────────┼──────────────────────────┐
                     │                          │                          │
             ┌───────▼────────┐        ┌────────▼────────┐       ┌────────▼────────┐
-            │  Ingress (UI)  │        │ TCP ConfigMap   │       │ TCP ConfigMap   │
-            │  HTTPS (443)   │        │ Database (12000)│       │ Database (12001)│
+            │ Ingress YAML   │        │ Helm tcp.12000  │       │ Helm tcp.12001  │
+            │ (rec-ui)       │        │ (auto ConfigMap)│       │ (auto ConfigMap)│
+            │ HTTPS (443)    │        │ TCP (12000)     │       │ TCP (12001)     │
             └───────┬────────┘        └────────┬────────┘       └────────┬────────┘
                     │                          │                          │
             ┌───────▼────────┐        ┌────────▼────────┐       ┌────────▼────────┐
             │  REC Service   │        │  DB Service     │       │  DB Service     │
-            │  rec-ui:8443   │        │  test-db:12000  │       │  cache-db:12001 │
+            │  rec-ui:8443   │        │  test-db:10414  │       │  cache-db:11234 │
             └────────────────┘        └─────────────────┘       └─────────────────┘
+
+Legend:
+  • REC UI: Uses Ingress resource (01-ingress-rec-ui.yaml)
+  • Databases: Use Helm values (--set tcp.PORT="namespace/service:port")
+  • Note: External port (12000) can differ from internal port (10414)
 ```
 
 ## 📁 Files
@@ -34,10 +95,13 @@ This configuration uses the NGINX Ingress Controller to provide external access 
 ```
 nginx/
 ├── README.md                          # This file
-└── 01-ingress-rec-ui.yaml             # REC UI Ingress
+└── 01-ingress-rec-ui.yaml             # REC UI Ingress (HTTPS)
 ```
 
-**Note:** TCP services for databases are configured via Helm values (`--set tcp.PORT="namespace/service:port"`).
+**⚠️ IMPORTANT:**
+- **REC UI** uses Kubernetes `Ingress` resource (HTTP/HTTPS) → needs YAML file
+- **Databases** use TCP passthrough via Helm values → **NO YAML file needed!**
+- TCP services are configured via: `--set tcp.PORT="namespace/service:port"`
 
 ## 🚀 Installation
 
