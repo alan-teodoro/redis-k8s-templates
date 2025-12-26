@@ -1,0 +1,28 @@
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: test-db
+  namespace: redis-ns-a
+spec:
+  redisEnterpriseCluster:
+    name: rec
+  
+  # Database configuration
+  memorySize: 1GB
+  
+  # TLS configuration
+  tlsMode: enabled
+  
+  # Replication
+  replication: true
+  
+  # Database password from secret
+  databaseSecretName: redb-secret
+  
+  # Module support (optional)
+  # modulesList:
+  #   - name: search
+  #     version: 2.8.4
+  #   - name: timeseries
+  #     version: 1.10.4
+

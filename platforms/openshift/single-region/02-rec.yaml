@@ -1,0 +1,47 @@
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec
+  namespace: redis-ns-a
+spec:
+  nodes: 3
+  username: admin@redis.com
+  
+  # Persistent storage
+  persistentSpec:
+    enabled: true
+    # storageClassName: <your-storageclass>  # Optional: specify storage class
+    # volumeSize: 20Gi                       # Optional: default is 10Gi
+  
+  # OpenShift Routes integration
+  # ⚠️ IMPORTANT: Update FQDNs to match your OpenShift cluster domain!
+  # Get your cluster domain: oc get ingresses.config/cluster -o jsonpath='{.spec.domain}'
+  ingressOrRouteSpec:
+    method: openShiftRoute
+    apiFqdnUrl: api-rec-redis-ns-a.apps.<YOUR-CLUSTER-DOMAIN>
+    dbFqdnSuffix: -db-rec-redis-ns-a.apps.<YOUR-CLUSTER-DOMAIN>
+  
+  # Red Hat Container Registry images (certified for OpenShift)
+  bootstrapperImageSpec:
+    repository: registry.connect.redhat.com/redislabs/redis-enterprise-operator
+  
+  redisEnterpriseServicesRiggerImageSpec:
+    repository: registry.connect.redhat.com/redislabs/services-manager
+  
+  redisEnterpriseImageSpec:
+    repository: registry.connect.redhat.com/redislabs/redis-enterprise
+  
+  usageMeter:
+    callHomeClient:
+      imageSpec:
+        repository: registry.connect.redhat.com/redislabs/call-home-client
+  
+  # Resource allocation per node
+  redisEnterpriseNodeResources:
+    requests:
+      cpu: 2
+      memory: 4Gi
+    limits:
+      cpu: 2
+      memory: 4Gi
+

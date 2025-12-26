@@ -20,6 +20,13 @@ OpenShift-specific configurations and guides for deploying Redis Enterprise.
 ```
 platforms/openshift/
 ├── README.md                   # This file
+├── single-region/              # Complete OpenShift example (OpenShift-specific)
+│   ├── README.md
+│   ├── 00-namespace.yaml
+│   ├── 01-rec-admin-secret.yaml
+│   ├── 02-rec.yaml
+│   ├── 03-redb-secret.yaml
+│   └── 04-redb.yaml
 ├── scc/                        # Security Context Constraints (OpenShift-specific)
 │   ├── README.md
 │   └── redis-scc.yaml
@@ -33,15 +40,24 @@ platforms/openshift/
     └── clusterB/
 ```
 
-**Generic configurations** (used by all platforms including OpenShift):
+**Deployment Options:**
+- **OpenShift-Specific (Recommended):** [single-region/README.md](single-region/README.md) - Complete example with Routes, secrets, OpenShift configurations
+- **Generic (Alternative):** [../../deployments/single-region/README.md](../../deployments/single-region/README.md) - Works on any Kubernetes
+
+**Generic configurations:**
 - **Operator:** [../../operator/README.md](../../operator/README.md)
-- **Deployments:** [../../deployments/single-region/README.md](../../deployments/single-region/README.md)
 - **Monitoring:** [../../monitoring/prometheus/README.md](../../monitoring/prometheus/README.md)
-- **Security:** [../../security/README.md](../../security/README.md)
 
 ---
 
 ## Quick Start
+
+**Two deployment options:**
+
+1. **OpenShift-Specific (Recommended):** [single-region/README.md](single-region/README.md) - Complete example with Routes, secrets, and OpenShift configurations
+2. **Generic (Below):** Use generic Kubernetes deployment with OpenShift-specific Routes
+
+---
 
 ### Prerequisites
 
