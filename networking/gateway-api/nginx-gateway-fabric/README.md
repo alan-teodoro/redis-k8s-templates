@@ -7,17 +7,19 @@ Official successor to NGINX Ingress Controller (retiring March 2026).
 ## Installation
 
 ```bash
-# 1. Install Gateway API CRDs
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/standard-install.yaml
+# 1. Install Gateway API CRDs (Experimental Channel for TLSRoute)
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/experimental?ref=v2.3.0" | kubectl apply -f -
 
-# 2. Install NGINX Gateway Fabric
+# 2. Install NGINX Gateway Fabric with experimental features enabled
 helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
   --create-namespace \
-  --namespace nginx-gateway
+  --namespace nginx-gateway \
+  --set nginxGateway.gwAPIExperimentalFeatures.enable=true
 
 # 3. Verify
 kubectl get gatewayclass
 kubectl get pods -n nginx-gateway
+kubectl get crd tlsroutes.gateway.networking.k8s.io
 ```
 
 ---
@@ -93,6 +95,49 @@ open https://ui.redis.example.com
 **Credentials:**
 - User: `demo@redis.com`
 - Pass: `kubectl get secret rec -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d`
+
+---
+
+## Database Access (TLS Passthrough)
+
+### 1. Create Gateway
+
+Gateway includes:
+- HTTP listener (port 80)
+- HTTPS listener with TLS termination (port 443) for REC UI
+- TLS passthrough listener (port 6379) for databases
+- AWS NLB annotation for better TLS passthrough support
+
+```bash
+kubectl apply -f gateway.yaml
+kubectl wait --for=condition=programmed gateway/redis-gateway -n nginx-gateway --timeout=5m
+```
+
+**Note:** Gateway creates AWS Network Load Balancer (NLB). Wait 2-3 minutes for provisioning.
+
+### 2. Create TLSRoute
+
+```bash
+kubectl apply -f tlsroute-database.yaml
+kubectl get tlsroute redis-db-tls-route -n redis-enterprise
+```
+
+### 3. Test Connection
+
+```bash
+# Get Gateway IP
+GATEWAY_HOSTNAME=$(kubectl get gateway redis-gateway -n nginx-gateway -o jsonpath='{.status.addresses[0].value}')
+GATEWAY_IP=$(dig +short $GATEWAY_HOSTNAME | head -1)
+
+# Get database password
+DB_PASSWORD=$(kubectl get secret redb-test-db -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d)
+
+# Test with redis-cli (requires SNI support)
+redis-cli -h db.redis.example.com -p 6379 --tls --sni db.redis.example.com --insecure -a $DB_PASSWORD PING
+
+# Add to /etc/hosts for testing
+echo "$GATEWAY_IP db.redis.example.com" | sudo tee -a /etc/hosts
+```
 
 ---
 

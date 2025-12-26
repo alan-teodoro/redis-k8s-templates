@@ -32,11 +32,11 @@ spec:
   
   # Routing rules
   rules:
-  
+
   # Route all TLS traffic to the database service
   - backendRefs:
     - name: test-db
-      port: 11909
+      port: 10414
       weight: 100
 
 ---

@@ -19,6 +19,9 @@ spec:
   # Redis database type
   type: redis
   
+  # Enable TLS
+  tlsMode: enabled
+  
   # Memory allocation
   memorySize: 1GB
   

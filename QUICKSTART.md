@@ -154,13 +154,14 @@ kubectl get validatingwebhookconfiguration redb-admission
 See: [networking/gateway-api/nginx-gateway-fabric/README.md](networking/gateway-api/nginx-gateway-fabric/README.md)
 
 ```bash
-# Install Gateway API CRDs (Standard Channel)
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/standard-install.yaml
+# Install Gateway API CRDs (Experimental Channel - includes TLSRoute for database access)
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/experimental?ref=v2.3.0" | kubectl apply -f -
 
-# Install NGINX Gateway Fabric
+# Install NGINX Gateway Fabric with experimental features enabled
 helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
   -n nginx-gateway \
-  --create-namespace
+  --create-namespace \
+  --set nginxGateway.gwAPIExperimentalFeatures.enable=true
 
 # Create TLS certificate (self-signed for testing)
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
@@ -205,6 +206,10 @@ echo "$GATEWAY_IP ui.redis.example.com" | sudo tee -a /etc/hosts
 
 # Open browser
 open https://ui.redis.example.com
+
+# (Optional) Database access via TLSRoute
+kubectl apply -f networking/gateway-api/nginx-gateway-fabric/tlsroute-database.yaml
+
 ---
 
 ## Verification Commands

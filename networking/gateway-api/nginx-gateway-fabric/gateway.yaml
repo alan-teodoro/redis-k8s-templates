@@ -13,6 +13,10 @@ metadata:
   namespace: nginx-gateway
   labels:
     app: redis-gateway
+  annotations:
+    # Use Network Load Balancer instead of Classic Load Balancer
+    # NLB is required for TLS passthrough and better performance
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
 spec:
   # GatewayClass defines which controller manages this Gateway
   # The 'nginx' GatewayClass was created by NGINX Gateway Fabric
@@ -46,13 +50,16 @@ spec:
         name: redis-tls-cert
         namespace: nginx-gateway
   
-  # TCP listener for Redis (port 6379)
-  # Note: TCPRoute requires experimental channel
-  # For now, we'll use HTTP/HTTPS for testing
-  # - name: redis-tcp
-  #   protocol: TCP
-  #   port: 6379
-  #   allowedRoutes:
-  #     namespaces:
-  #       from: All
+  # TLS listener for Redis Database (port 6379)
+  # TLS Passthrough - does NOT terminate TLS, forwards encrypted traffic
+  # Requires Experimental Channel (TLSRoute)
+  - name: tls-passthrough
+    protocol: TLS
+    port: 6379
+    hostname: "*.redis.example.com"
+    allowedRoutes:
+      namespaces:
+        from: All
+    tls:
+      mode: Passthrough  # Key: Passthrough (not Terminate)
 
