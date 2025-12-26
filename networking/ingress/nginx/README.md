@@ -34,108 +34,111 @@ This configuration uses the NGINX Ingress Controller to provide external access 
 ```
 nginx/
 ├── README.md                          # This file
-├── 00-install-nginx-ingress.sh        # Installation script
-├── 01-ingress-rec-ui.yaml             # REC UI Ingress
-├── 02-tcp-configmap.yaml              # TCP services configuration
-└── 03-patch-nginx-service.yaml        # LoadBalancer service patch
+└── 01-ingress-rec-ui.yaml             # REC UI Ingress
 ```
+
+**Note:** TCP services for databases are configured via Helm values (`--set tcp.PORT="namespace/service:port"`).
 
 ## 🚀 Installation
 
-### Step 1: Install NGINX Ingress Controller
+### Step 1: Install NGINX Ingress Controller with TCP Support
 
 ```bash
-# Run installation script
-./00-install-nginx-ingress.sh
-
-# Or manually:
+# Add Helm repository
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 
+# Install for AWS EKS with TCP port 12000 for database
 helm install ingress-nginx ingress-nginx/ingress-nginx \
   --namespace ingress-nginx \
   --create-namespace \
   --set controller.service.type=LoadBalancer \
   --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
-  --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing"
+  --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing" \
+  --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-cross-zone-load-balancing-enabled"="true" \
+  --set tcp.12000="redis-enterprise/test-db:12000"
+
+# For GKE
+# helm install ingress-nginx ingress-nginx/ingress-nginx \
+#   --namespace ingress-nginx \
+#   --create-namespace \
+#   --set controller.service.type=LoadBalancer \
+#   --set tcp.12000="redis-enterprise/test-db:12000"
+
+# For AKS
+# helm install ingress-nginx ingress-nginx/ingress-nginx \
+#   --namespace ingress-nginx \
+#   --create-namespace \
+#   --set controller.service.type=LoadBalancer \
+#   --set tcp.12000="redis-enterprise/test-db:12000"
+
+# For vanilla Kubernetes
+# helm install ingress-nginx ingress-nginx/ingress-nginx \
+#   --namespace ingress-nginx \
+#   --create-namespace \
+#   --set controller.service.type=LoadBalancer \
+#   --set tcp.12000="redis-enterprise/test-db:12000"
 ```
 
-**Note:** Adjust annotations for your cloud provider (EKS, GKE, AKS).
+**Note:** The `--set tcp.12000="redis-enterprise/test-db:12000"` configures TCP passthrough for the database on port 12000.
 
 ### Step 2: Wait for LoadBalancer
 
 ```bash
+# Wait for pods to be ready
 kubectl wait --for=condition=ready pod \
   -l app.kubernetes.io/name=ingress-nginx \
   -n ingress-nginx \
   --timeout=300s
 
-# Get LoadBalancer IP/hostname
+# Get LoadBalancer hostname (wait for EXTERNAL-IP)
 kubectl get svc ingress-nginx-controller -n ingress-nginx
 ```
 
-### Step 3: Configure DNS
-
-Create DNS records pointing to the LoadBalancer:
-
-```
-# REC UI
-rec-ui.example.com → <LOADBALANCER-IP>
-
-# Databases
-db-test.example.com → <LOADBALANCER-IP>
-db-cache.example.com → <LOADBALANCER-IP>
-```
-
-### Step 4: Deploy REC UI Ingress
+### Step 3: Deploy REC UI Ingress
 
 ```bash
-# Update hostname in 01-ingress-rec-ui.yaml
-# Then apply:
+# Apply REC UI Ingress
 kubectl apply -f 01-ingress-rec-ui.yaml
 ```
 
-### Step 5: Configure TCP Services for Databases
+**Note:** Update the hostname in `01-ingress-rec-ui.yaml` before applying if needed.
 
-```bash
-# Update database endpoints in 02-tcp-configmap.yaml
-kubectl apply -f 02-tcp-configmap.yaml
+## 📝 Configuration
 
-# Patch NGINX service to expose database ports
-kubectl apply -f 03-patch-nginx-service.yaml
-```
-
-## 📝 Configuration Files
-
-### 01-ingress-rec-ui.yaml
+### REC UI Ingress (01-ingress-rec-ui.yaml)
 
 Exposes REC UI on HTTPS (port 443).
 
 **Key configurations:**
-- TLS termination at ingress
-- Backend uses HTTPS (port 8443)
-- Self-signed certificate handling
+- `ingressClassName: nginx` - Uses NGINX Ingress Controller
+- `nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"` - Backend uses HTTPS
+- `nginx.ingress.kubernetes.io/proxy-ssl-verify: "false"` - Accepts self-signed certificates
+- Backend service: `rec-ui:8443`
 
-### 02-tcp-configmap.yaml
-
-Maps external TCP ports to internal database services.
-
-**Format:**
+**Update before applying:**
 ```yaml
-data:
-  "12000": "redis-enterprise/test-db:12000"
-  "12001": "redis-enterprise/cache-db:12001"
+rules:
+  - host: rec-ui.example.com  # ⚠️ Change to your domain
 ```
 
-### 03-patch-nginx-service.yaml
+### TCP Services (Configured via Helm)
 
-Adds database ports to LoadBalancer service.
+Database TCP ports are configured during Helm install/upgrade:
 
-**Ports:**
-- 443: HTTPS (REC UI)
-- 12000: Database 1
-- 12001: Database 2
-- ... (add more as needed)
+```bash
+# Single database
+--set tcp.12000="redis-enterprise/test-db:12000"
+
+# Multiple databases
+--set tcp.12000="redis-enterprise/test-db:12000" \
+--set tcp.12001="redis-enterprise/cache-db:12001"
+```
+
+This automatically:
+- Creates a ConfigMap with TCP service mappings
+- Exposes ports on the LoadBalancer service
+- Configures NGINX to proxy TCP traffic
 
 ## 🔐 Access
 
@@ -169,22 +172,24 @@ redis-cli -h ${LB_HOST} \
 
 ## 🔧 Adding New Databases
 
-When creating a new database, update the TCP ConfigMap:
+When creating a new database, upgrade the Helm release to add the new TCP port:
 
 ```bash
-# 1. Edit 02-tcp-configmap.yaml
-# Add new line:
-#   "12002": "redis-enterprise/new-db:12002"
+# Add database on port 12001
+helm upgrade ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --reuse-values \
+  --set tcp.12001="redis-enterprise/cache-db:12001"
 
-# 2. Apply changes
-kubectl apply -f 02-tcp-configmap.yaml
+# Add multiple databases at once
+helm upgrade ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --reuse-values \
+  --set tcp.12001="redis-enterprise/cache-db:12001" \
+  --set tcp.12002="redis-enterprise/session-db:12002"
 
-# 3. Update LoadBalancer service
-# Edit 03-patch-nginx-service.yaml to add port 12002
-kubectl apply -f 03-patch-nginx-service.yaml
-
-# 4. Wait for LoadBalancer update
-kubectl rollout status deployment ingress-nginx-controller -n ingress-nginx
+# Verify ports are exposed
+kubectl get svc ingress-nginx-controller -n ingress-nginx
 ```
 
 ## 🔍 Troubleshooting

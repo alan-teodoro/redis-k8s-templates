@@ -42,7 +42,6 @@ Istio provides:
 ```
 istio/
 ├── README.md                          # This file
-├── 00-install-istio.sh                # Installation script
 ├── 01-gateway-rec-ui.yaml             # Gateway for REC UI
 ├── 02-virtualservice-rec-ui.yaml      # VirtualService for REC UI
 ├── 03-gateway-database.yaml           # Gateway for databases
@@ -54,20 +53,16 @@ istio/
 ### Step 1: Install Istio
 
 ```bash
-# Run installation script
-./00-install-istio.sh
-
-# Or manually:
 # Download istioctl
-curl -L https://istio.io/downloadIstio | sh -
-cd istio-*
+curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.20.0 sh -
+cd istio-1.20.0
 export PATH=$PWD/bin:$PATH
 
-# Install Istio
+# Install Istio with default profile
 istioctl install --set profile=default -y
 
 # Enable sidecar injection for redis-enterprise namespace
-kubectl label namespace redis-enterprise istio-injection=enabled
+kubectl label namespace redis-enterprise istio-injection=enabled --overwrite
 ```
 
 ### Step 2: Wait for Istio

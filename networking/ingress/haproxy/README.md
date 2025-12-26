@@ -31,7 +31,6 @@ HAProxy Ingress provides:
 ```
 haproxy/
 ├── README.md                          # This file
-├── 00-install-haproxy-ingress.sh      # Installation script
 ├── 01-ingress-rec-ui.yaml             # REC UI Ingress
 └── 02-ingress-database.yaml           # Database Ingress (TLS passthrough)
 ```
@@ -41,13 +40,11 @@ haproxy/
 ### Step 1: Install HAProxy Ingress Controller
 
 ```bash
-# Run installation script
-./00-install-haproxy-ingress.sh
-
-# Or manually:
+# Add Helm repository
 helm repo add haproxy-ingress https://haproxy-ingress.github.io/charts
 helm repo update
 
+# Install HAProxy Ingress
 helm install haproxy-ingress haproxy-ingress/haproxy-ingress \
   --namespace ingress-haproxy \
   --create-namespace \
