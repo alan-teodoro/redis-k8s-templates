@@ -20,9 +20,13 @@ Generic deployment for Redis Enterprise Cluster and Database in a single Kuberne
 | File | Description |
 |------|-------------|
 | `00-namespace.yaml` | Namespace creation |
-| `01-rbac-rack-awareness.yaml` | RBAC for multi-AZ rack awareness |
-| `02-rec.yaml` | Redis Enterprise Cluster (3 nodes) |
-| `03-redb.yaml` | Redis Database (test-db) |
+| `01-rec-admin-secret.yaml` | REC admin credentials (username: admin@redis.com, password: RedisAdmin123!) |
+| `02-redb-secret.yaml` | Database password (RedisAdmin123!) |
+| `03-rbac-rack-awareness.yaml` | RBAC for multi-AZ rack awareness |
+| `04-rec.yaml` | Redis Enterprise Cluster (3 nodes) |
+| `05-redb.yaml` | Redis Database (test-db, port 12000) |
+
+**⚠️ IMPORTANT:** Change passwords before production deployment!
 
 ---
 
@@ -32,26 +36,30 @@ Generic deployment for Redis Enterprise Cluster and Database in a single Kuberne
 # 1. Create namespace
 kubectl apply -f 00-namespace.yaml
 
-# 2. Apply RBAC for rack awareness
-kubectl apply -f 01-rbac-rack-awareness.yaml
+# 2. Create secrets (admin: admin@redis.com / RedisAdmin123!, db: RedisAdmin123!)
+kubectl apply -f 01-rec-admin-secret.yaml
+kubectl apply -f 02-redb-secret.yaml
 
-# 3. Deploy Redis Enterprise Cluster
-kubectl apply -f 02-rec.yaml
+# 3. Apply RBAC for rack awareness
+kubectl apply -f 03-rbac-rack-awareness.yaml
 
-# 4. Wait for cluster to be ready (5-10 minutes)
+# 4. Deploy Redis Enterprise Cluster
+kubectl apply -f 04-rec.yaml
+
+# 5. Wait for cluster to be ready (5-10 minutes)
 kubectl wait --for=condition=Ready rec/rec -n redis-enterprise --timeout=600s
 
-# 5. Verify cluster
+# 6. Verify cluster
 kubectl get rec -n redis-enterprise
 kubectl get pods -n redis-enterprise
 
-# 6. Create database
-kubectl apply -f 03-redb.yaml
+# 7. Create database (port 12000)
+kubectl apply -f 05-redb.yaml
 
-# 7. Wait for database to be ready
+# 8. Wait for database to be ready
 kubectl wait --for=condition=Active redb/test-db -n redis-enterprise --timeout=300s
 
-# 8. Verify database
+# 9. Verify database
 kubectl get redb test-db -n redis-enterprise
 ```
 
@@ -72,58 +80,68 @@ kubectl get redb test-db -n redis-enterprise
 - **Name:** test-db
 - **Type:** Redis
 - **Memory:** 1GB
+- **Port:** 12000 (fixed for consistency)
 - **TLS:** Enabled
 - **Replication:** Enabled (master + replica)
+- **Password:** From secret `redb-secret`
 
 ---
 
 ## Access Credentials
 
-### REC Admin Password
+**Pre-configured credentials for testing/demo purposes:**
+
+### REC Admin Credentials
+
+- **Username:** `admin@redis.com`
+- **Password:** `RedisAdmin123!`
 
 ```bash
+# Get password from secret
 kubectl get secret rec -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d
 ```
 
-**Default user:** `demo@redis.com`
-
 ### Database Password
 
+- **Password:** `RedisAdmin123!`
+
 ```bash
-kubectl get secret redb-test-db -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d
+# Get password from secret
+kubectl get secret redb-secret -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d
 ```
+
+**⚠️ SECURITY WARNING:** These are default credentials for testing/demo purposes only. **ALWAYS change passwords before production deployment!**
 
 ---
 
 ## Test Connectivity
 
-### Get Database Port
+### Connection Details
 
 ```bash
-DB_PORT=$(kubectl get redb test-db -n redis-enterprise -o jsonpath='{.status.databasePort}')
-echo "Database Port: $DB_PORT"
+# Database endpoint
+DB_HOST=test-db.redis-enterprise.svc.cluster.local
+DB_PORT=12000  # Fixed port for consistency
+
+# Get password
+DB_PASSWORD=$(kubectl get secret redb-secret -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d)
+# Or use default: RedisAdmin123!
 ```
 
-### Get Database Password
+### Test Connection (With TLS - Recommended)
 
 ```bash
-DB_PASSWORD=$(kubectl get secret redb-test-db -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d)
+kubectl run -it --rm redis-test --image=redis:latest --restart=Never -- \
+  redis-cli -h test-db.redis-enterprise.svc.cluster.local -p 12000 --tls --insecure -a RedisAdmin123! PING
 ```
+
+**Expected:** `PONG`
 
 ### Test Connection (Internal - No TLS)
 
 ```bash
 kubectl run -it --rm redis-test --image=redis:latest --restart=Never -- \
-  redis-cli -h test-db.redis-enterprise.svc.cluster.local -p $DB_PORT -a $DB_PASSWORD PING
-```
-
-**Expected:** `PONG`
-
-### Test Connection (With TLS)
-
-```bash
-kubectl run -it --rm redis-test --image=redis:latest --restart=Never -- \
-  redis-cli -h test-db.redis-enterprise.svc.cluster.local -p $DB_PORT --tls --insecure -a $DB_PASSWORD PING
+  redis-cli -h test-db.redis-enterprise.svc.cluster.local -p 12000 -a RedisAdmin123! PING
 ```
 
 **Expected:** `PONG`

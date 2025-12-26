@@ -85,17 +85,21 @@ Geo-distributed Redis Enterprise deployment across multiple Kubernetes clusters.
 # 1. Create namespace
 kubectl apply -f single-region/00-namespace.yaml
 
-# 2. Apply RBAC
-kubectl apply -f single-region/01-rbac-rack-awareness.yaml
+# 2. Create secrets (admin: admin@redis.com / RedisAdmin123!, db: RedisAdmin123!)
+kubectl apply -f single-region/01-rec-admin-secret.yaml
+kubectl apply -f single-region/02-redb-secret.yaml
 
-# 3. Deploy cluster
-kubectl apply -f single-region/02-rec.yaml
+# 3. Apply RBAC
+kubectl apply -f single-region/03-rbac-rack-awareness.yaml
 
-# 4. Wait for ready
+# 4. Deploy cluster
+kubectl apply -f single-region/04-rec.yaml
+
+# 5. Wait for ready
 kubectl wait --for=condition=Ready rec/rec -n redis-enterprise --timeout=600s
 
-# 5. Create database
-kubectl apply -f single-region/03-redb.yaml
+# 6. Create database (port 12000)
+kubectl apply -f single-region/05-redb.yaml
 ```
 
 **See:** [single-region/README.md](single-region/README.md) for detailed instructions.

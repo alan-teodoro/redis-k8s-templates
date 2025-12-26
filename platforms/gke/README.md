@@ -76,17 +76,21 @@ helm install redis-operator redis/redis-enterprise-operator \
 # Create namespace
 kubectl apply -f ../../deployments/single-region/00-namespace.yaml
 
+# Create secrets
+kubectl apply -f ../../deployments/single-region/01-rec-admin-secret.yaml
+kubectl apply -f ../../deployments/single-region/02-redb-secret.yaml
+
 # Apply RBAC
-kubectl apply -f ../../deployments/single-region/01-rbac-rack-awareness.yaml
+kubectl apply -f ../../deployments/single-region/03-rbac-rack-awareness.yaml
 
 # Deploy REC
-kubectl apply -f ../../deployments/single-region/02-rec.yaml
+kubectl apply -f ../../deployments/single-region/04-rec.yaml
 
 # Wait for ready
 kubectl wait --for=condition=Ready rec/rec -n redis-enterprise --timeout=600s
 
-# Create database
-kubectl apply -f ../../deployments/single-region/03-redb.yaml
+# Create database (port 12000)
+kubectl apply -f ../../deployments/single-region/05-redb.yaml
 ```
 
 #### 4. Configure Networking (Generic)

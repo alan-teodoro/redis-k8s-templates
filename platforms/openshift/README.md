@@ -97,17 +97,21 @@ helm install redis-operator redis/redis-enterprise-operator \
 # Create namespace
 oc apply -f ../../deployments/single-region/00-namespace.yaml
 
+# Create secrets
+oc apply -f ../../deployments/single-region/01-rec-admin-secret.yaml
+oc apply -f ../../deployments/single-region/02-redb-secret.yaml
+
 # Apply RBAC
-oc apply -f ../../deployments/single-region/01-rbac-rack-awareness.yaml
+oc apply -f ../../deployments/single-region/03-rbac-rack-awareness.yaml
 
 # Deploy REC
-oc apply -f ../../deployments/single-region/02-rec.yaml
+oc apply -f ../../deployments/single-region/04-rec.yaml
 
 # Wait for ready
 oc wait --for=condition=Ready rec/rec -n redis-enterprise --timeout=600s
 
-# Create database
-oc apply -f ../../deployments/single-region/03-redb.yaml
+# Create database (port 12000)
+oc apply -f ../../deployments/single-region/05-redb.yaml
 ```
 
 #### 4. Create Routes (OpenShift-Specific)

@@ -6,16 +6,19 @@ metadata:
 spec:
   redisEnterpriseCluster:
     name: rec
-  
+
   # Database configuration
   memorySize: 1GB
-  
+
+  # Database port (fixed for consistency across environments)
+  databasePort: 12000
+
   # TLS configuration
   tlsMode: enabled
-  
+
   # Replication
   replication: true
-  
+
   # Database password from secret
   databaseSecretName: redb-secret
   

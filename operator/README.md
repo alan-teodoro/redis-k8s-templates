@@ -27,7 +27,7 @@ kubectl get crd | grep redis
 Required for multi-AZ deployments to enable rack awareness.
 
 ```bash
-kubectl apply -f ../deployments/single-region/01-rbac-rack-awareness.yaml
+kubectl apply -f ../deployments/single-region/03-rbac-rack-awareness.yaml
 ```
 
 ---
