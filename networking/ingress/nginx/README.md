@@ -127,13 +127,22 @@ rules:
 Database TCP ports are configured during Helm install/upgrade:
 
 ```bash
-# Single database
---set tcp.12000="redis-enterprise/test-db:12000"
+# Format: --set tcp.<EXTERNAL_PORT>="<namespace>/<service>:<INTERNAL_PORT>"
+
+# Example: Expose database on external port 12000
+# (internal port may be different, check with: kubectl get svc -n redis-enterprise)
+--set tcp.12000="redis-enterprise/test-db:10414"
 
 # Multiple databases
---set tcp.12000="redis-enterprise/test-db:12000" \
---set tcp.12001="redis-enterprise/cache-db:12001"
+--set tcp.12000="redis-enterprise/test-db:10414" \
+--set tcp.12001="redis-enterprise/cache-db:11234"
 ```
+
+**Important Notes:**
+- **External port** (12000): Port exposed on the LoadBalancer (what clients connect to)
+- **Internal port** (10414): Port of the Kubernetes service (check with `kubectl get svc`)
+- The external and internal ports can be different
+- To find the internal port: `kubectl get svc <db-name> -n redis-enterprise`
 
 This automatically:
 - Creates a ConfigMap with TCP service mappings
@@ -150,16 +159,24 @@ LB_HOST=$(kubectl get svc ingress-nginx-controller -n ingress-nginx \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
 echo "REC UI: https://${LB_HOST}"
+
+# Test HTTPS access (with Host header)
+curl -k -I https://${LB_HOST} -H "Host: rec-ui.example.com"
 ```
 
 **Credentials:**
 - Username: `admin@redis.com`
 - Password: `RedisAdmin123!`
 
+**Note:** You need to either:
+1. Configure DNS to point `rec-ui.example.com` to the LoadBalancer, OR
+2. Use `curl` with `-H "Host: rec-ui.example.com"` header, OR
+3. Add to `/etc/hosts`: `<LB-IP> rec-ui.example.com`
+
 ### Database Access
 
 ```bash
-# Test database connection
+# Test database connection via TCP port 12000
 redis-cli -h ${LB_HOST} \
   -p 12000 \
   --tls \
@@ -169,6 +186,8 @@ redis-cli -h ${LB_HOST} \
 ```
 
 **Expected:** `PONG`
+
+**Note:** The database is accessed directly via TCP passthrough on port 12000.
 
 ## 🔧 Adding New Databases
 
@@ -192,6 +211,67 @@ helm upgrade ingress-nginx ingress-nginx/ingress-nginx \
 kubectl get svc ingress-nginx-controller -n ingress-nginx
 ```
 
+## ✅ Verification
+
+### Check Installation
+
+```bash
+# Check NGINX pods
+kubectl get pods -n ingress-nginx
+
+# Check LoadBalancer service and ports
+kubectl get svc ingress-nginx-controller -n ingress-nginx
+
+# Check Ingress resources
+kubectl get ingress -n redis-enterprise
+
+# Check TCP ConfigMap (created by Helm)
+kubectl get configmap tcp-services -n ingress-nginx -o yaml
+```
+
+### Verify Database Port Mapping
+
+**Important:** The database service port may be different from the external port!
+
+```bash
+# 1. Find the internal port of your database service
+kubectl get svc test-db -n redis-enterprise
+# Example output: test-db   ClusterIP   10.100.86.188   <none>   10414/TCP
+#                                                                  ^^^^^ This is the internal port
+
+# 2. Check Helm values to see TCP mappings
+helm get values ingress-nginx -n ingress-nginx
+
+# 3. Verify the ConfigMap has correct mapping
+kubectl get configmap tcp-services -n ingress-nginx -o yaml
+# Should show: "12000": redis-enterprise/test-db:10414
+#               ^^^^^                              ^^^^^
+#            External port                    Internal port
+```
+
+### Test Connectivity
+
+```bash
+# Get LoadBalancer hostname
+LB_HOST=$(kubectl get svc ingress-nginx-controller -n ingress-nginx \
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+echo "LoadBalancer: ${LB_HOST}"
+
+# Test REC UI (HTTPS)
+curl -k -I https://${LB_HOST} -H "Host: rec-ui.example.com"
+# Expected: HTTP/2 200
+
+# Test Database (TCP)
+# First get the database password
+DB_PASS=$(kubectl get secret redb-test-db -n redis-enterprise \
+  -o jsonpath='{.data.password}' | base64 -d)
+
+# Then test connection (use EXTERNAL port 12000)
+redis-cli -h ${LB_HOST} -p 12000 --tls --insecure -a ${DB_PASS} PING
+# Expected: PONG
+```
+
 ## 🔍 Troubleshooting
 
 ### Ingress Not Working
@@ -203,29 +283,57 @@ kubectl describe ingress rec-ui -n redis-enterprise
 
 # Check NGINX logs
 kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx --tail=50
+
+# Verify backend service exists
+kubectl get svc rec-ui -n redis-enterprise
 ```
 
 ### TCP Services Not Working
 
+**Common issue:** Wrong internal port in TCP mapping!
+
 ```bash
-# Verify ConfigMap
+# 1. Verify the database service port
+kubectl get svc <db-name> -n redis-enterprise
+# Note the port number (e.g., 10414)
+
+# 2. Check if ConfigMap has correct mapping
 kubectl get configmap tcp-services -n ingress-nginx -o yaml
+# Should be: "12000": "redis-enterprise/<db-name>:<INTERNAL_PORT>"
 
-# Check if ports are exposed on LoadBalancer
+# 3. If wrong, update via Helm
+helm upgrade ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --reuse-values \
+  --set tcp.12000="redis-enterprise/<db-name>:<CORRECT_INTERNAL_PORT>"
+
+# 4. Check if ports are exposed on LoadBalancer
 kubectl get svc ingress-nginx-controller -n ingress-nginx
+# Should show: 12000:XXXXX/TCP
 
-# Test connectivity
+# 5. Test connectivity
 telnet <LOADBALANCER-IP> 12000
 ```
 
 ### TLS Certificate Issues
 
 ```bash
-# Check certificate
+# Check REC UI certificate
 openssl s_client -connect <LOADBALANCER-IP>:443 -servername rec-ui.example.com
 
 # For databases (TLS passthrough)
 openssl s_client -connect <LOADBALANCER-IP>:12000
+```
+
+### Authentication Failed
+
+```bash
+# Get the correct database password
+kubectl get secret redb-<db-name> -n redis-enterprise \
+  -o jsonpath='{.data.password}' | base64 -d
+
+# Test with correct password
+redis-cli -h <LOADBALANCER-IP> -p 12000 --tls --insecure -a <PASSWORD> PING
 ```
 
 ## 🧹 Cleanup
