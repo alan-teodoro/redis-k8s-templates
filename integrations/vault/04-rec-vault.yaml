@@ -1,0 +1,124 @@
+# Redis Enterprise Cluster with Vault Integration
+#
+# This REC configuration uses HashiCorp Vault for secret management.
+# All secrets (cluster credentials, certificates) are retrieved from Vault.
+#
+# Prerequisites:
+# - Vault server configured and accessible
+# - Vault secrets stored:
+#   - secret/redisenterprise-redis-enterprise/rec (cluster credentials)
+# - operator-environment-config ConfigMap applied
+# - vault-ca-cert secret created
+# - Redis Enterprise operator installed with Vault configuration
+#
+# Verification:
+#   kubectl get rec -n redis-enterprise
+#   kubectl wait --for=condition=Ready rec/rec -n redis-enterprise --timeout=600s
+#   kubectl get pods -n redis-enterprise
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  # Cluster size
+  nodes: 3
+  
+  # Redis Enterprise version
+  redisEnterpriseImageSpec:
+    imagePullPolicy: IfNotPresent
+  
+  # Resource allocation per node
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 4Gi
+  
+  # Persistent storage
+  persistentSpec:
+    enabled: true
+    storageClassName: "gp3"  # Update for your platform (gp3 for EKS, pd-ssd for GKE, etc.)
+    volumeSize: 10Gi
+  
+  # Vault Integration Configuration
+  # ================================
+  
+  # Cluster credentials from Vault
+  clusterCredentialSecretName: rec
+  clusterCredentialSecretType: vault
+  clusterCredentialSecretRole: redis-enterprise-rec-redis-enterprise
+  
+  # Vault CA certificate
+  vaultCASecret: vault-ca-cert
+  
+  # Vault annotations for pod-level configuration
+  podAnnotations:
+    vault.hashicorp.com/auth-path: auth/kubernetes
+    vault.hashicorp.com/namespace: ""  # Empty for Vault Community Edition
+  
+  # UI Service
+  uiServiceType: ClusterIP
+  
+  # Services rigger service broker
+  servicesRiggerSpec:
+    databaseServiceType: cluster_ip
+  
+  # Rack awareness (optional - for multi-AZ deployments)
+  rackAwarenessNodeLabel: topology.kubernetes.io/zone
+
+---
+# Configuration Explained:
+#
+# clusterCredentialSecretName:
+#   Name of the secret in Vault containing cluster credentials
+#   Must match the secret name stored in Vault
+#   Example: "rec" maps to secret/redisenterprise-redis-enterprise/rec
+#
+# clusterCredentialSecretType:
+#   Must be "vault" to enable Vault integration
+#   Default is "kubernetes" for standard K8s secrets
+#
+# clusterCredentialSecretRole:
+#   Vault role for cluster authentication
+#   Must match the role created in Vault
+#   Format: redis-enterprise-rec-<NAMESPACE>
+#
+# vaultCASecret:
+#   Name of the Kubernetes secret containing Vault's CA certificate
+#   Must exist in the same namespace as the REC
+#
+# podAnnotations:
+#   vault.hashicorp.com/auth-path:
+#     Kubernetes auth method path in Vault (default: auth/kubernetes)
+#   
+#   vault.hashicorp.com/namespace:
+#     Vault Enterprise namespace (empty for Community Edition)
+#
+# Vault Secret Structure:
+#   The cluster credentials secret in Vault must have:
+#   - username: Admin username (e.g., admin@redis.com)
+#   - password: Admin password (e.g., RedisAdmin123!)
+#
+#   Example Vault command:
+#     vault kv put secret/redisenterprise-redis-enterprise/rec \
+#       username=admin@redis.com \
+#       password=RedisAdmin123!
+#
+# Optional: Additional Certificates from Vault
+#   You can also store TLS certificates in Vault:
+#
+#   certificates:
+#     apiCertificateSecretName: api-cert
+#     cmCertificateSecretName: cm-cert
+#     proxyCertificateSecretName: proxy-cert
+#     syncerCertificateSecretName: syncer-cert
+#
+#   Each certificate must be stored in Vault at:
+#     secret/redisenterprise-redis-enterprise/<cert-name>
+

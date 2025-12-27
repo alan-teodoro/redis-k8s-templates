@@ -1,0 +1,108 @@
+# Redis Enterprise Database with Vault Integration
+#
+# This REDB configuration uses HashiCorp Vault for password management.
+# The database password is retrieved from Vault instead of Kubernetes secrets.
+#
+# Prerequisites:
+# - REC deployed with Vault integration
+# - Database password stored in Vault:
+#   - secret/redisenterprise-redis-enterprise/test-db
+#
+# Verification:
+#   kubectl get redb -n redis-enterprise
+#   kubectl wait --for=condition=Ready redb/test-db -n redis-enterprise --timeout=300s
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: test-db
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  # Database name
+  name: test-db
+  
+  # Memory size
+  memorySize: 100MB
+  
+  # Database port
+  databasePort: 12000
+  
+  # Database password from Vault
+  # The secret name must match the secret stored in Vault
+  # Vault path: secret/redisenterprise-redis-enterprise/test-db
+  databaseSecretName: test-db
+  
+  # TLS mode
+  tlsMode: enabled
+  
+  # Client authentication
+  clientAuthenticationCertificates: ""
+  
+  # Replication
+  replication: true
+  
+  # Persistence
+  persistence: aofEverySecond
+  
+  # Eviction policy
+  evictionPolicy: volatile-lru
+  
+  # Module list (optional)
+  # modulesList:
+  #   - name: search
+  #     version: 2.8.4
+  
+  # Backup configuration (optional - credentials from Vault)
+  # backup:
+  #   interval: 24
+  #   s3:
+  #     awsSecretName: s3-backup-credentials
+  #     bucketName: redis-backups
+  #     subdir: test-db
+
+---
+# Configuration Explained:
+#
+# databaseSecretName:
+#   Name of the secret in Vault containing the database password
+#   Must match the secret name stored in Vault
+#   Example: "test-db" maps to secret/redisenterprise-redis-enterprise/test-db
+#
+# Vault Secret Structure:
+#   The database password secret in Vault must have:
+#   - password: Database password
+#
+#   Example Vault command:
+#     vault kv put secret/redisenterprise-redis-enterprise/test-db \
+#       password=TestDB123!
+#
+# How It Works:
+#   1. REC is configured with Vault integration (clusterCredentialSecretType: vault)
+#   2. All databases created in this REC automatically use Vault for secrets
+#   3. The databaseSecretName references a secret in Vault
+#   4. The operator retrieves the password from Vault at deployment time
+#
+# Optional: Backup Credentials from Vault
+#   If using backups, store credentials in Vault:
+#
+#   For S3:
+#     vault kv put secret/redisenterprise-redis-enterprise/s3-backup-credentials \
+#       AWS_ACCESS_KEY_ID=<access_key> \
+#       AWS_SECRET_ACCESS_KEY=<secret_key>
+#
+#   For GCS:
+#     vault kv put secret/redisenterprise-redis-enterprise/gcs-backup-credentials \
+#       GOOGLE_CREDENTIALS=<json_key_content>
+#
+# Testing Database Connection:
+#   # Get password from Vault (on Vault server)
+#   vault kv get -field=password secret/redisenterprise-redis-enterprise/test-db
+#
+#   # Connect to database
+#   redis-cli -h test-db.redis-enterprise.svc.cluster.local -p 12000 \
+#     --tls --insecure \
+#     -a <PASSWORD_FROM_VAULT> \
+#     PING
+
