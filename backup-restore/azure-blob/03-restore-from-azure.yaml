@@ -1,0 +1,50 @@
+# Restore Redis Database from Azure Blob Storage Backup
+#
+# Prerequisites:
+# - REC deployed
+# - Backup file exists in Azure Blob Storage
+# - Azure credentials secret exists (or Managed Identity configured)
+#
+# Usage:
+#   kubectl apply -f 03-restore-from-azure.yaml
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: restored-db
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    restored: "true"
+spec:
+  name: restored-db
+  memorySize: 1GB  # Must be >= original database size
+  databasePort: 12001
+  tlsMode: enabled
+  replication: true
+  persistence: aofEverySecond
+  evictionPolicy: volatile-lru
+  
+  # Restore from Azure Blob Storage Backup
+  backup:
+    abs:
+      absSecretName: azure-backup-credentials
+      container: redis-backups
+      subdir: production/test-db
+      
+      # Backup file name to restore
+      # ⚠️ REPLACE with actual backup file name
+      backupName: backup-2024-01-15-030000.rdb
+
+---
+# How to find backup files:
+#   az storage blob list \
+#     --container-name redis-backups \
+#     --account-name <storage-account> \
+#     --prefix production/test-db/ \
+#     --auth-mode login
+#
+# Verification:
+#   kubectl get redb restored-db -n redis-enterprise
+#   kubectl wait --for=condition=Ready redb/restored-db -n redis-enterprise --timeout=300s
+

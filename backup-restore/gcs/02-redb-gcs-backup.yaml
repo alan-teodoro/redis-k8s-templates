@@ -1,0 +1,87 @@
+# Redis Enterprise Database with GCS Backup
+#
+# This REDB configuration includes automated backups to Google Cloud Storage.
+#
+# Prerequisites:
+# - REC deployed
+# - GCS bucket created
+# - GCS credentials secret created (01-gcs-credentials-secret.yaml)
+#   OR Workload Identity configured (for GKE)
+#
+# Usage:
+#   kubectl apply -f 02-redb-gcs-backup.yaml
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: test-db
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    backup: enabled
+spec:
+  name: test-db
+  memorySize: 1GB
+  databasePort: 12000
+  tlsMode: enabled
+  replication: true
+  persistence: aofEverySecond
+  evictionPolicy: volatile-lru
+  
+  # GCS Backup Configuration
+  backup:
+    interval: 24  # Every 24 hours
+    # OR time: "03:00"  # 3 AM UTC daily
+    
+    gcs:
+      # Secret containing GCS credentials
+      # Required key: GOOGLE_APPLICATION_CREDENTIALS (base64-encoded JSON key)
+      # Not needed if using Workload Identity (GKE)
+      gcsSecretName: gcs-backup-credentials
+      
+      # GCS bucket name
+      # ⚠️ REPLACE with your actual bucket name
+      bucketName: redis-backups
+      
+      # Subdirectory within bucket
+      subdir: production/test-db
+
+---
+# Configuration Notes:
+#
+# gcs.gcsSecretName:
+#   Name of Kubernetes secret containing GCS credentials
+#   Required key: GOOGLE_APPLICATION_CREDENTIALS
+#   
+#   Not needed if using Workload Identity
+#
+# gcs.bucketName:
+#   GCS bucket name (without gs:// prefix)
+#   Bucket must exist before creating database
+#   
+#   Best practices:
+#     - Use dedicated bucket for Redis backups
+#     - Enable versioning
+#     - Enable encryption
+#     - Set lifecycle policies
+#
+# gcs.subdir:
+#   Subdirectory path within bucket
+#   Recommended: <environment>/<database-name>
+#
+# Backup Retention:
+#   - Last 7 daily backups
+#   - Last 4 weekly backups
+#   - Last 12 monthly backups
+#
+# GCS Path Structure:
+#   gs://<bucketName>/<subdir>/backup-<timestamp>.rdb
+#   Example: gs://redis-backups/production/test-db/backup-2024-01-15-030000.rdb
+#
+# Verification:
+#   # Check backup configuration
+#   kubectl get redb test-db -n redis-enterprise -o yaml | grep -A10 backup
+#
+#   # List backups in GCS
+#   gcloud storage ls gs://redis-backups/production/test-db/
+

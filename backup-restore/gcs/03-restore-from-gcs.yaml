@@ -1,0 +1,62 @@
+# Restore Redis Database from GCS Backup
+#
+# This REDB configuration restores data from a GCS backup.
+#
+# Prerequisites:
+# - REC deployed
+# - Backup file exists in GCS
+# - GCS credentials secret exists (or Workload Identity configured)
+#
+# Usage:
+#   kubectl apply -f 03-restore-from-gcs.yaml
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: restored-db
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    restored: "true"
+spec:
+  name: restored-db
+  memorySize: 1GB  # Must be >= original database size
+  databasePort: 12001
+  tlsMode: enabled
+  replication: true
+  persistence: aofEverySecond
+  evictionPolicy: volatile-lru
+  
+  # Restore from GCS Backup
+  backup:
+    gcs:
+      gcsSecretName: gcs-backup-credentials
+      bucketName: redis-backups
+      subdir: production/test-db
+      
+      # Backup file name to restore
+      # ⚠️ REPLACE with actual backup file name
+      # Format: backup-YYYY-MM-DD-HHMMSS.rdb
+      backupName: backup-2024-01-15-030000.rdb
+
+---
+# Configuration Notes:
+#
+# How to find backup files:
+#   gcloud storage ls gs://redis-backups/production/test-db/
+#
+# Restore Scenarios:
+#
+# 1. Restore to NEW database (alongside original):
+#    - Use different name: restored-db
+#    - Use different port: 12001
+#
+# 2. Restore to SAME database (replace original):
+#    - Delete original: kubectl delete redb test-db -n redis-enterprise
+#    - Use original name: test-db
+#    - Use original port: 12000
+#
+# Verification:
+#   kubectl get redb restored-db -n redis-enterprise
+#   kubectl wait --for=condition=Ready redb/restored-db -n redis-enterprise --timeout=300s
+

@@ -1,0 +1,180 @@
+# Restore Redis Database from S3 Backup
+#
+# This REDB configuration restores data from an S3 backup.
+#
+# ⚠️ IMPORTANT:
+# - Restore creates a NEW database with restored data
+# - To restore to existing database, delete it first
+# - Backup file must exist in S3 before applying
+#
+# Prerequisites:
+# - REC deployed
+# - Backup file exists in S3
+# - S3 credentials secret exists (or IRSA configured)
+#
+# Usage:
+#   # Update backup location and apply
+#   kubectl apply -f 03-restore-from-s3.yaml
+#
+# Verification:
+#   kubectl get redb restored-db -n redis-enterprise
+#   kubectl wait --for=condition=Ready redb/restored-db -n redis-enterprise --timeout=300s
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: restored-db
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    restored: "true"
+spec:
+  # Database name
+  name: restored-db
+  
+  # Memory size (must be >= original database size)
+  memorySize: 1GB
+  
+  # Database port
+  databasePort: 12001
+  
+  # TLS mode
+  tlsMode: enabled
+  
+  # Replication
+  replication: true
+  
+  # Persistence
+  persistence: aofEverySecond
+  
+  # Eviction policy
+  evictionPolicy: volatile-lru
+  
+  # Restore from S3 Backup
+  backup:
+    s3:
+      # Secret containing AWS credentials
+      awsSecretName: s3-backup-credentials
+      
+      # S3 bucket name
+      # ⚠️ REPLACE with your actual bucket name
+      bucketName: redis-backups
+      
+      # Subdirectory within bucket
+      # Must match the backup location
+      subdir: production/test-db
+      
+      # Backup file name to restore
+      # ⚠️ REPLACE with actual backup file name
+      # Format: backup-YYYY-MM-DD-HHMMSS.rdb
+      # Example: backup-2024-01-15-030000.rdb
+      backupName: backup-2024-01-15-030000.rdb
+      
+      # AWS region (optional)
+      # awsRegion: us-east-1
+
+---
+# Configuration Explained:
+#
+# metadata.name:
+#   Name of the NEW database to create
+#   Can be same as original (if original is deleted)
+#   Or different name (to restore alongside original)
+#
+# spec.memorySize:
+#   Must be >= original database memory size
+#   If smaller, restore may fail
+#   
+#   Recommendation: Use same or larger size
+#
+# spec.databasePort:
+#   Port for the restored database
+#   Must be different if original database still exists
+#   
+#   Examples:
+#     - Original: 12000, Restored: 12001
+#     - Original: 12000, Restored: 12000 (if original deleted)
+#
+# backup.s3.backupName:
+#   Exact filename of backup to restore
+#   Format: backup-YYYY-MM-DD-HHMMSS.rdb
+#   
+#   How to find backup files:
+#     # List backups in S3
+#     aws s3 ls s3://redis-backups/production/test-db/
+#     
+#     # Output example:
+#     # 2024-01-15 03:00:00  12345678 backup-2024-01-15-030000.rdb
+#     # 2024-01-16 03:00:00  12345679 backup-2024-01-16-030000.rdb
+#   
+#   Use the filename from the backup you want to restore
+#
+# Restore Scenarios:
+#
+# Scenario 1: Restore to NEW database (alongside original)
+#   - Use different metadata.name (e.g., "restored-db")
+#   - Use different databasePort (e.g., 12001)
+#   - Original database continues running
+#   - Useful for testing/validation
+#
+# Scenario 2: Restore to SAME database (replace original)
+#   Step 1: Delete original database
+#     kubectl delete redb test-db -n redis-enterprise
+#   
+#   Step 2: Wait for deletion
+#     kubectl wait --for=delete redb/test-db -n redis-enterprise --timeout=300s
+#   
+#   Step 3: Apply restore with original name
+#     metadata.name: test-db
+#     databasePort: 12000
+#
+# Scenario 3: Restore from different environment
+#   - Update subdir to source environment
+#   - Example: subdir: production/test-db (restore prod backup to staging)
+#
+# Verification After Restore:
+#
+#   # Check database status
+#   kubectl get redb restored-db -n redis-enterprise
+#
+#   # Get database password
+#   DB_PASS=$(kubectl get secret redb-restored-db -n redis-enterprise \
+#     -o jsonpath='{.data.password}' | base64 -d)
+#
+#   # Connect and verify data
+#   kubectl run redis-cli --image=redis:7 -it --rm -- \
+#     redis-cli -h restored-db.redis-enterprise.svc.cluster.local \
+#     -p 12001 --tls --insecure -a $DB_PASS
+#
+#   # Inside redis-cli:
+#   # > DBSIZE
+#   # > KEYS *
+#   # > GET <some-key>
+#
+# Troubleshooting:
+#
+#   Database stuck in "Pending":
+#     - Check backup file exists in S3
+#     - Verify S3 credentials are correct
+#     - Check operator logs:
+#       kubectl logs -n redis-enterprise -l name=redis-enterprise-operator --tail=100
+#
+#   "Backup not found" error:
+#     - Verify backupName matches exact filename in S3
+#     - Check subdir path is correct
+#     - List S3 bucket contents:
+#       aws s3 ls s3://redis-backups/production/test-db/
+#
+#   "Insufficient memory" error:
+#     - Increase memorySize in spec
+#     - Check REC has available memory:
+#       kubectl get rec -n redis-enterprise -o yaml | grep -A5 resources
+#
+# Best Practices:
+#
+#   1. Test restore procedure regularly (monthly recommended)
+#   2. Restore to different database name first (validate before replacing)
+#   3. Document restore procedures in runbooks
+#   4. Keep backup retention policy aligned with RTO/RPO requirements
+#   5. Monitor restore time for capacity planning
+

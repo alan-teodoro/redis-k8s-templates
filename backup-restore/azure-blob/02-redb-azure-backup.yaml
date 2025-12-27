@@ -1,0 +1,72 @@
+# Redis Enterprise Database with Azure Blob Storage Backup
+#
+# Prerequisites:
+# - REC deployed
+# - Azure Storage Account and container created
+# - Azure credentials secret created (or Managed Identity configured)
+#
+# Usage:
+#   kubectl apply -f 02-redb-azure-backup.yaml
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: test-db
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    backup: enabled
+spec:
+  name: test-db
+  memorySize: 1GB
+  databasePort: 12000
+  tlsMode: enabled
+  replication: true
+  persistence: aofEverySecond
+  evictionPolicy: volatile-lru
+  
+  # Azure Blob Storage Backup Configuration
+  backup:
+    interval: 24  # Every 24 hours
+    # OR time: "03:00"  # 3 AM UTC daily
+    
+    abs:
+      # Secret containing Azure credentials
+      # Required keys: AZURE_ACCOUNT_NAME, AZURE_ACCOUNT_KEY
+      # Not needed if using Managed Identity (AKS)
+      absSecretName: azure-backup-credentials
+      
+      # Blob container name
+      # ⚠️ REPLACE with your actual container name
+      container: redis-backups
+      
+      # Subdirectory within container
+      subdir: production/test-db
+
+---
+# Configuration Notes:
+#
+# abs.absSecretName:
+#   Name of Kubernetes secret containing Azure credentials
+#   Required keys: AZURE_ACCOUNT_NAME, AZURE_ACCOUNT_KEY
+#   Not needed if using Managed Identity
+#
+# abs.container:
+#   Azure Blob container name
+#   Container must exist before creating database
+#
+# abs.subdir:
+#   Subdirectory path within container
+#   Recommended: <environment>/<database-name>
+#
+# Azure Blob Path Structure:
+#   https://<account>.blob.core.windows.net/<container>/<subdir>/backup-<timestamp>.rdb
+#
+# Verification:
+#   # List backups
+#   az storage blob list \
+#     --container-name redis-backups \
+#     --account-name <storage-account> \
+#     --prefix production/test-db/ \
+#     --auth-mode login
+
