@@ -1,0 +1,191 @@
+# Redis Enterprise Database Example for Istio
+#
+# This REDB will be accessible externally via Istio ingress at:
+# db-test.redis.example.com:443
+#
+# Prerequisites:
+# - REC deployed with Istio configuration (05-rec-istio.yaml)
+# - VirtualService deployed for this database (04-virtualservice-db.yaml)
+# - DNS configured: db-test.redis.example.com → Istio LoadBalancer IP
+#
+# Usage:
+#   kubectl apply -f 06-redb-example.yaml
+#
+# Verification:
+#   kubectl get redb -n redis-enterprise
+#   kubectl wait --for=condition=Ready redb/test-db -n redis-enterprise --timeout=300s
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: test-db
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  # Database name
+  name: test-db
+  
+  # Memory size
+  memorySize: 100MB
+  
+  # Database port (internal)
+  # External clients connect to port 443 (Istio routes to this port)
+  databasePort: 12000
+  
+  # TLS mode (REQUIRED for Istio ingress)
+  # Istio uses TLS passthrough - database must handle TLS
+  tlsMode: enabled
+  
+  # Client authentication
+  clientAuthenticationCertificates: ""
+  
+  # Replication
+  replication: true
+  
+  # Persistence
+  persistence: aofEverySecond
+  
+  # Eviction policy
+  evictionPolicy: volatile-lru
+  
+  # Module list (optional)
+  # modulesList:
+  #   - name: search
+  #     version: 2.8.4
+  #   - name: timeseries
+  #     version: 1.10.11
+
+---
+# Configuration Explained:
+#
+# databasePort:
+#   Internal port the database listens on (12000).
+#   External clients connect to port 443 (Istio ingress).
+#   Istio routes from 443 → 12000 based on SNI.
+#
+# tlsMode:
+#   MUST be "enabled" for Istio ingress.
+#   Istio uses TLS passthrough - does not terminate TLS.
+#   Database handles TLS termination.
+#   
+#   Options:
+#     - enabled: TLS required
+#     - disabled: No TLS (NOT compatible with Istio ingress)
+#
+# External Access:
+#   With REC configured with:
+#     dbFqdnSuffix: .redis.example.com
+#   
+#   This database is accessible at:
+#     db-test.redis.example.com:443
+#   
+#   Hostname format: <metadata.name><dbFqdnSuffix>
+#   Example: test-db + .redis.example.com = db-test.redis.example.com
+#
+# VirtualService Requirement:
+#   A VirtualService must exist with matching SNI:
+#   
+#   apiVersion: networking.istio.io/v1beta1
+#   kind: VirtualService
+#   metadata:
+#     name: redis-vs-db
+#   spec:
+#     gateways:
+#     - redis-gateway
+#     hosts:
+#     - 'db-test.redis.example.com'
+#     tls:
+#     - match:
+#       - port: 443
+#         sniHosts:
+#         - db-test.redis.example.com
+#       route:
+#       - destination:
+#           host: test-db
+#           port:
+#             number: 12000
+#
+# Testing External Access:
+#   
+#   # Get database password
+#   DB_PASS=$(kubectl get secret redb-test-db -n redis-enterprise \
+#     -o jsonpath='{.data.password}' | base64 -d)
+#   
+#   # Test with redis-cli
+#   redis-cli -h db-test.redis.example.com -p 443 \
+#     --tls --insecure \
+#     --sni db-test.redis.example.com \
+#     -a $DB_PASS \
+#     PING
+#   
+#   # Expected: PONG
+#
+# Testing with OpenSSL:
+#   
+#   # Get proxy certificate
+#   kubectl exec -it rec-0 -n redis-enterprise -c redis-enterprise-node \
+#     -- cat /etc/opt/redislabs/proxy_cert.pem > proxy_cert.pem
+#   
+#   # Test connection
+#   openssl s_client \
+#     -connect db-test.redis.example.com:443 \
+#     -crlf -CAfile ./proxy_cert.pem \
+#     -servername db-test.redis.example.com
+#   
+#   # Type: PING
+#   # Expected: +PONG
+#
+# Testing with Python:
+#   
+#   import redis
+#   
+#   r = redis.StrictRedis(
+#       host='db-test.redis.example.com',
+#       port=443,
+#       db=0,
+#       ssl=True,
+#       ssl_ca_certs='/path/to/proxy_cert.pem',
+#       password='<DB_PASSWORD>'
+#   )
+#   
+#   print(r.ping())  # Should print: True
+#
+# Troubleshooting:
+#   
+#   Database not accessible externally:
+#     1. Check database is ready:
+#        kubectl get redb test-db -n redis-enterprise
+#     
+#     2. Check service exists:
+#        kubectl get svc test-db -n redis-enterprise
+#     
+#     3. Check VirtualService exists:
+#        kubectl get virtualservice redis-vs-db -n redis-enterprise
+#     
+#     4. Check DNS resolves:
+#        dig db-test.redis.example.com
+#     
+#     5. Check TLS is enabled:
+#        kubectl get redb test-db -n redis-enterprise -o yaml | grep tlsMode
+#     
+#     6. Test SNI:
+#        openssl s_client -connect db-test.redis.example.com:443 \
+#          -servername db-test.redis.example.com
+#   
+#   TLS handshake fails:
+#     - Verify tlsMode: enabled
+#     - Verify client sends SNI header
+#     - Verify VirtualService has correct sniHosts
+#   
+#   Connection timeout:
+#     - Verify DNS resolves to Istio LoadBalancer IP
+#     - Verify Istio ingress gateway is running
+#     - Check security groups / firewall rules
+#
+# Notes:
+#   - Client MUST support SNI (Server Name Indication)
+#   - Client connects to port 443 (not 12000)
+#   - Istio routes based on SNI to backend port 12000
+#   - Each database needs its own VirtualService
+

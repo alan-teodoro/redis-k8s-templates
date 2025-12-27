@@ -1,0 +1,161 @@
+# Istio VirtualService for Redis Enterprise Cluster API
+#
+# This VirtualService routes traffic to the Redis Enterprise Cluster (REC) API
+# based on SNI hostname matching.
+#
+# Prerequisites:
+# - Gateway redis-gateway deployed
+# - REC deployed with service name 'rec'
+# - DNS configured: api.redis.example.com → Istio LoadBalancer IP
+#
+# Usage:
+#   kubectl apply -f 03-virtualservice-rec.yaml
+#
+# Verification:
+#   kubectl get virtualservice -n redis-enterprise
+#   kubectl describe virtualservice redis-vs-rec -n redis-enterprise
+
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: redis-vs-rec
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  # Reference to Gateway resource
+  gateways:
+  - redis-gateway
+  
+  # Hostnames this VirtualService handles
+  # Must match or be subset of Gateway hosts
+  hosts:
+  - 'api.redis.example.com'
+  
+  # TLS routing rules (for PASSTHROUGH mode)
+  tls:
+  - match:
+    # Match based on SNI hostname and port
+    - port: 443
+      sniHosts:
+      - api.redis.example.com
+    
+    # Route to REC API service
+    route:
+    - destination:
+        # Kubernetes service name
+        # Must match: kubectl get svc rec -n redis-enterprise
+        host: rec
+        
+        # Service port for API
+        # REC API default port: 9443
+        port:
+          number: 9443
+
+---
+# Configuration Explained:
+#
+# gateways:
+#   List of Gateway resources this VirtualService binds to.
+#   Must reference an existing Gateway in the same namespace.
+#   
+#   Example:
+#     gateways:
+#     - redis-gateway
+#     - another-gateway
+#
+# hosts:
+#   Hostnames this VirtualService handles.
+#   Must be a subset of Gateway hosts.
+#   
+#   Gateway has: *.redis.example.com
+#   VirtualService can have: api.redis.example.com (specific)
+#
+# tls.match:
+#   Matching criteria for TLS traffic (PASSTHROUGH mode).
+#   
+#   port: External port (443)
+#   sniHosts: SNI hostname sent by client
+#
+# tls.route.destination:
+#   Where to send matched traffic.
+#   
+#   host: Kubernetes service name (short name or FQDN)
+#     - Short: rec
+#     - FQDN: rec.redis-enterprise.svc.cluster.local
+#   
+#   port.number: Service port (9443 for REC API)
+#
+# Traffic Flow:
+#   1. Client connects to api.redis.example.com:443 with SNI
+#   2. DNS resolves to Istio LoadBalancer IP
+#   3. Gateway accepts connection (TLS passthrough)
+#   4. VirtualService reads SNI header: api.redis.example.com
+#   5. Routes to service: rec:9443
+#   6. REC API receives encrypted connection
+#
+# Service Name Verification:
+#   kubectl get svc rec -n redis-enterprise
+#   
+#   Expected output:
+#   NAME   TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)
+#   rec    ClusterIP   10.43.123.45    <none>        9443/TCP,8443/TCP
+#
+# Port Verification:
+#   REC API port is typically 9443 (HTTPS).
+#   Verify with:
+#     kubectl get svc rec -n redis-enterprise -o yaml | grep -A5 ports
+#
+# Multiple Routes:
+#   To route different paths or hostnames to different services:
+#   
+#   tls:
+#   - match:
+#     - port: 443
+#       sniHosts:
+#       - api.redis.example.com
+#     route:
+#     - destination:
+#         host: rec
+#         port:
+#           number: 9443
+#   
+#   - match:
+#     - port: 443
+#       sniHosts:
+#       - api2.redis.example.com
+#     route:
+#     - destination:
+#         host: rec2
+#         port:
+#           number: 9443
+#
+# Troubleshooting:
+#   
+#   VirtualService not routing:
+#     kubectl describe virtualservice redis-vs-rec -n redis-enterprise
+#   
+#   Check service exists:
+#     kubectl get svc rec -n redis-enterprise
+#   
+#   Check service port:
+#     kubectl get svc rec -n redis-enterprise -o yaml
+#   
+#   Test SNI:
+#     openssl s_client -connect api.redis.example.com:443 \
+#       -servername api.redis.example.com
+#   
+#   Check Gateway binding:
+#     kubectl get gateway redis-gateway -n redis-enterprise
+#
+# Testing:
+#   # Get REC credentials
+#   REC_USER=$(kubectl get secret rec -n redis-enterprise \
+#     -o jsonpath='{.data.username}' | base64 -d)
+#   REC_PASS=$(kubectl get secret rec -n redis-enterprise \
+#     -o jsonpath='{.data.password}' | base64 -d)
+#   
+#   # Test API access
+#   curl -k https://api.redis.example.com:443/v1/cluster \
+#     -u $REC_USER:$REC_PASS
+

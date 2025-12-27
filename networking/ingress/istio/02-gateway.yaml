@@ -1,0 +1,131 @@
+# Istio Gateway for Redis Enterprise
+#
+# This Gateway resource configures the Istio Ingress Gateway to accept
+# HTTPS traffic on port 443 with TLS passthrough for Redis Enterprise.
+#
+# Prerequisites:
+# - Istio installed with ingress gateway
+# - DNS configured: *.redis.example.com → Istio LoadBalancer IP
+#
+# Usage:
+#   kubectl apply -f 02-gateway.yaml
+#
+# Verification:
+#   kubectl get gateway -n redis-enterprise
+#   kubectl describe gateway redis-gateway -n redis-enterprise
+
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: redis-gateway
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  # Selector matches the Istio ingress gateway pods
+  # Default label: istio=ingressgateway
+  # Verify with: kubectl get pods -n istio-system -l istio=ingressgateway --show-labels
+  selector:
+    istio: ingressgateway
+  
+  # Server configuration
+  servers:
+  - hosts:
+    # Wildcard hostname for all Redis services
+    # Must be leftmost wildcard only (Istio restriction)
+    # ✅ Supported: *.redis.example.com
+    # ❌ Not supported: *-redis.example.com (partial wildcard)
+    - '*.redis.example.com'
+    
+    # Port configuration
+    port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    
+    # TLS configuration
+    tls:
+      # PASSTHROUGH mode: Istio does NOT terminate TLS
+      # Encrypted traffic is passed directly to backend services
+      # Required for Redis databases (they handle TLS termination)
+      mode: PASSTHROUGH
+
+---
+# Configuration Explained:
+#
+# selector:
+#   Matches the labels on Istio ingress gateway pods.
+#   Default installation uses: istio=ingressgateway
+#   
+#   To verify your selector:
+#     kubectl get pods -n istio-system -l istio=ingressgateway --show-labels
+#
+# hosts:
+#   List of hostnames this gateway accepts.
+#   Use wildcard (*.redis.example.com) to match all subdomains.
+#   
+#   Examples:
+#     - api.redis.example.com
+#     - db1.redis.example.com
+#     - db2.redis.example.com
+#   
+#   All match: *.redis.example.com
+#
+# port.number:
+#   External port clients connect to (443 for HTTPS).
+#
+# port.protocol:
+#   Must be HTTPS for TLS traffic.
+#
+# tls.mode:
+#   PASSTHROUGH: Istio forwards encrypted traffic without termination.
+#   
+#   Other modes (not used for Redis):
+#     - SIMPLE: Istio terminates TLS (requires certificate)
+#     - MUTUAL: Istio terminates TLS with client cert validation
+#     - AUTO_PASSTHROUGH: Automatic SNI-based passthrough
+#
+# Why PASSTHROUGH?
+#   Redis databases handle their own TLS termination.
+#   Istio cannot decrypt Redis protocol traffic.
+#   SNI (Server Name Indication) is used for routing.
+#
+# Hostname Restrictions:
+#   Istio only supports:
+#     ✅ Full leftmost wildcards: *.example.com
+#     ✅ Explicit FQDNs: api.example.com
+#   
+#   Istio does NOT support:
+#     ❌ Partial wildcards: *-redis.example.com
+#     ❌ Middle wildcards: redis.*.example.com
+#
+# Multiple Domains:
+#   To support multiple domains, add more entries to hosts:
+#   
+#   servers:
+#   - hosts:
+#     - '*.redis.example.com'
+#     - '*.redis.example.net'
+#     port:
+#       number: 443
+#       name: https
+#       protocol: HTTPS
+#     tls:
+#       mode: PASSTHROUGH
+#
+# Troubleshooting:
+#   
+#   Gateway not ready:
+#     kubectl describe gateway redis-gateway -n redis-enterprise
+#   
+#   Check selector matches:
+#     kubectl get pods -n istio-system -l istio=ingressgateway
+#   
+#   Verify Istio ingress gateway service:
+#     kubectl get svc istio-ingressgateway -n istio-system
+#   
+#   Test connectivity:
+#     ISTIO_IP=$(kubectl get svc istio-ingressgateway -n istio-system \
+#       -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+#     curl -I http://$ISTIO_IP
+

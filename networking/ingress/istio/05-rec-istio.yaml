@@ -1,0 +1,197 @@
+# Redis Enterprise Cluster with Istio Integration
+#
+# This REC configuration enables Istio ingress for external routing.
+# Uses dot-prefixed dbFqdnSuffix for Istio compatibility.
+#
+# Prerequisites:
+# - Istio installed with ingress gateway
+# - Gateway and VirtualServices deployed
+# - DNS configured: *.redis.example.com → Istio LoadBalancer IP
+# - Redis Enterprise Operator installed
+#
+# Usage:
+#   kubectl apply -f 05-rec-istio.yaml
+#
+# Verification:
+#   kubectl get rec -n redis-enterprise
+#   kubectl wait --for=condition=Ready rec/rec -n redis-enterprise --timeout=600s
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  # Cluster size
+  nodes: 3
+  
+  # Redis Enterprise version
+  redisEnterpriseImageSpec:
+    imagePullPolicy: IfNotPresent
+  
+  # Resource allocation per node
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 4Gi
+  
+  # Persistent storage
+  persistentSpec:
+    enabled: true
+    storageClassName: "gp3"  # Update for your platform (gp3 for EKS, pd-ssd for GKE, etc.)
+    volumeSize: 10Gi
+  
+  # Istio Ingress Configuration
+  # ============================
+  
+  ingressOrRouteSpec:
+    # Method: istio (uses Gateway and VirtualService)
+    method: istio
+    
+    # API FQDN: Explicit hostname for REC API
+    # Must match VirtualService SNI hostname
+    # ✅ Use explicit FQDN (no wildcards)
+    apiFqdnUrl: api.redis.example.com
+    
+    # Database FQDN Suffix: Suffix for all database hostnames
+    # ⚠️ MUST be dot-prefixed for Istio compatibility
+    # ✅ Correct: .redis.example.com (dot-prefixed)
+    # ❌ Wrong: -redis.example.com (hyphen-prefixed, creates partial wildcard)
+    #
+    # Database hostnames will be: <db-name>.redis.example.com
+    # Example: test-db.redis.example.com
+    dbFqdnSuffix: .redis.example.com
+  
+  # UI Service
+  uiServiceType: ClusterIP
+  
+  # Services rigger service broker
+  servicesRiggerSpec:
+    databaseServiceType: cluster_ip
+  
+  # Rack awareness (optional - for multi-AZ deployments)
+  rackAwarenessNodeLabel: topology.kubernetes.io/zone
+  
+  # Cluster credentials (optional - uses default if not specified)
+  # username: admin@redis.com
+  # password: RedisAdmin123!
+
+---
+# Configuration Explained:
+#
+# ingressOrRouteSpec.method:
+#   Ingress method to use.
+#   Options:
+#     - istio: Uses Istio Gateway and VirtualService
+#     - ingress: Uses Kubernetes Ingress (NGINX, HAProxy)
+#     - openShiftRoute: Uses OpenShift Route
+#     - none: No external routing
+#
+# ingressOrRouteSpec.apiFqdnUrl:
+#   Hostname for REC API access.
+#   Must be an explicit FQDN (no wildcards).
+#   Must match VirtualService SNI hostname.
+#   
+#   Example: api.redis.example.com
+#   
+#   Clients access API at: https://api.redis.example.com:443
+#
+# ingressOrRouteSpec.dbFqdnSuffix:
+#   Suffix appended to database names to create FQDNs.
+#   
+#   ⚠️ CRITICAL for Istio: MUST be dot-prefixed
+#   
+#   ✅ Correct: .redis.example.com
+#     - Creates: test-db.redis.example.com
+#     - Istio accepts: *.redis.example.com (full leftmost wildcard)
+#   
+#   ❌ Wrong: -redis.example.com
+#     - Creates: test-db-redis.example.com
+#     - Istio rejects: *-redis.example.com (partial wildcard)
+#   
+#   Database FQDN format: <db-name><dbFqdnSuffix>
+#   Example: test-db + .redis.example.com = test-db.redis.example.com
+#
+# Why Dot-Prefixed?
+#   Istio only supports full leftmost wildcards (*.example.com).
+#   Dot-prefixed suffix creates hostnames that match this pattern.
+#   
+#   Hyphen-prefixed creates partial wildcards (*-example.com) which Istio rejects.
+#
+# Hostname Examples:
+#   
+#   With dbFqdnSuffix: .redis.example.com
+#     - Database: test-db → test-db.redis.example.com ✅
+#     - Database: cache → cache.redis.example.com ✅
+#     - Matches wildcard: *.redis.example.com ✅
+#   
+#   With dbFqdnSuffix: -redis.example.com (WRONG for Istio)
+#     - Database: test-db → test-db-redis.example.com ❌
+#     - Database: cache → cache-redis.example.com ❌
+#     - Would need wildcard: *-redis.example.com ❌ (partial wildcard - not supported)
+#
+# DNS Configuration:
+#   Create wildcard DNS record:
+#     *.redis.example.com → Istio LoadBalancer IP
+#   
+#   This covers:
+#     - api.redis.example.com (REC API)
+#     - test-db.redis.example.com (databases)
+#     - any-db.redis.example.com (future databases)
+#
+# VirtualService Requirements:
+#   Each database needs a VirtualService with matching SNI:
+#   
+#   apiVersion: networking.istio.io/v1beta1
+#   kind: VirtualService
+#   metadata:
+#     name: redis-vs-test-db
+#   spec:
+#     gateways:
+#     - redis-gateway
+#     hosts:
+#     - 'test-db.redis.example.com'
+#     tls:
+#     - match:
+#       - port: 443
+#         sniHosts:
+#         - test-db.redis.example.com
+#       route:
+#       - destination:
+#           host: test-db
+#           port:
+#             number: 12000
+#
+# Troubleshooting:
+#   
+#   Istio webhook error "partial wildcard not allowed":
+#     - Check dbFqdnSuffix is dot-prefixed (.redis.example.com)
+#     - NOT hyphen-prefixed (-redis.example.com)
+#   
+#   REC not creating ingress resources:
+#     - Verify method: istio
+#     - Check operator logs:
+#       kubectl logs -n redis-enterprise -l name=redis-enterprise-operator
+#   
+#   API not accessible:
+#     - Verify VirtualService exists for apiFqdnUrl
+#     - Check DNS resolves to Istio LoadBalancer
+#     - Test SNI: openssl s_client -connect api.redis.example.com:443 \
+#                   -servername api.redis.example.com
+#
+# Verification:
+#   # Check REC status
+#   kubectl get rec -n redis-enterprise
+#   
+#   # Check services created
+#   kubectl get svc -n redis-enterprise
+#   
+#   # Test API access
+#   curl -k https://api.redis.example.com:443/v1/cluster \
+#     -u admin@redis.com:RedisAdmin123!
+

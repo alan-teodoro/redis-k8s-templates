@@ -1,0 +1,186 @@
+# Istio VirtualService for Redis Enterprise Database
+#
+# This VirtualService routes traffic to a Redis Enterprise Database (REDB)
+# based on SNI hostname matching.
+#
+# Prerequisites:
+# - Gateway redis-gateway deployed
+# - REDB deployed with service name 'test-db'
+# - DNS configured: db-test.redis.example.com → Istio LoadBalancer IP
+#
+# Usage:
+#   kubectl apply -f 04-virtualservice-db.yaml
+#
+# Verification:
+#   kubectl get virtualservice -n redis-enterprise
+#   kubectl describe virtualservice redis-vs-db -n redis-enterprise
+
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: redis-vs-db
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    database: test-db
+spec:
+  # Reference to Gateway resource
+  gateways:
+  - redis-gateway
+  
+  # Hostnames this VirtualService handles
+  # Must match or be subset of Gateway hosts
+  hosts:
+  - 'db-test.redis.example.com'
+  
+  # TLS routing rules (for PASSTHROUGH mode)
+  tls:
+  - match:
+    # Match based on SNI hostname and port
+    - port: 443
+      sniHosts:
+      - db-test.redis.example.com
+    
+    # Route to database service
+    route:
+    - destination:
+        # Kubernetes service name
+        # Must match: kubectl get svc test-db -n redis-enterprise
+        host: test-db
+        
+        # Service port for database
+        # Database port: 12000 (standard port for this template)
+        port:
+          number: 12000
+
+---
+# Configuration Explained:
+#
+# gateways:
+#   List of Gateway resources this VirtualService binds to.
+#   Typically the same gateway used for REC API.
+#
+# hosts:
+#   Database hostname.
+#   Each database should have its own unique hostname.
+#   
+#   Examples:
+#     - db-test.redis.example.com
+#     - db-prod.redis.example.com
+#     - cache.redis.example.com
+#
+# tls.match:
+#   Matching criteria for TLS traffic.
+#   
+#   port: External port (443)
+#   sniHosts: SNI hostname sent by client
+#   
+#   Client MUST send SNI header matching this hostname.
+#
+# tls.route.destination:
+#   Where to send matched traffic.
+#   
+#   host: Kubernetes service name for the database
+#     - Created automatically when REDB is deployed
+#     - Name matches REDB metadata.name
+#   
+#   port.number: Database port (12000 in this example)
+#     - Must match REDB spec.databasePort
+#
+# Traffic Flow:
+#   1. Client connects to db-test.redis.example.com:443 with SNI
+#   2. DNS resolves to Istio LoadBalancer IP
+#   3. Gateway accepts connection (TLS passthrough)
+#   4. VirtualService reads SNI header: db-test.redis.example.com
+#   5. Routes to service: test-db:12000
+#   6. Database receives encrypted connection and handles TLS
+#
+# Service Name Verification:
+#   kubectl get svc test-db -n redis-enterprise
+#   
+#   Expected output:
+#   NAME      TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)
+#   test-db   ClusterIP   10.43.234.56    <none>        12000/TCP
+#
+# Port Verification:
+#   Database port must match REDB configuration:
+#     kubectl get redb test-db -n redis-enterprise -o yaml | grep databasePort
+#   
+#   Output should show: databasePort: 12000
+#
+# Multiple Databases:
+#   Create one VirtualService per database, or combine in one file:
+#   
+#   apiVersion: networking.istio.io/v1beta1
+#   kind: VirtualService
+#   metadata:
+#     name: redis-vs-databases
+#   spec:
+#     gateways:
+#     - redis-gateway
+#     hosts:
+#     - '*.redis.example.com'
+#     tls:
+#     - match:
+#       - port: 443
+#         sniHosts:
+#         - db1.redis.example.com
+#       route:
+#       - destination:
+#           host: db1
+#           port:
+#             number: 12000
+#     
+#     - match:
+#       - port: 443
+#         sniHosts:
+#         - db2.redis.example.com
+#       route:
+#       - destination:
+#           host: db2
+#           port:
+#             number: 12001
+#
+# Troubleshooting:
+#   
+#   VirtualService not routing:
+#     kubectl describe virtualservice redis-vs-db -n redis-enterprise
+#   
+#   Check database service exists:
+#     kubectl get svc test-db -n redis-enterprise
+#   
+#   Check database is ready:
+#     kubectl get redb test-db -n redis-enterprise
+#   
+#   Check service port matches REDB:
+#     kubectl get redb test-db -n redis-enterprise -o yaml | grep databasePort
+#     kubectl get svc test-db -n redis-enterprise -o yaml | grep -A5 ports
+#   
+#   Test SNI:
+#     openssl s_client -connect db-test.redis.example.com:443 \
+#       -servername db-test.redis.example.com
+#   
+#   Check TLS is enabled on database:
+#     kubectl get redb test-db -n redis-enterprise -o yaml | grep tlsMode
+#     # Should show: tlsMode: enabled
+#
+# Testing:
+#   # Get database password
+#   DB_PASS=$(kubectl get secret redb-test-db -n redis-enterprise \
+#     -o jsonpath='{.data.password}' | base64 -d)
+#   
+#   # Test with redis-cli
+#   redis-cli -h db-test.redis.example.com -p 443 \
+#     --tls --insecure \
+#     --sni db-test.redis.example.com \
+#     -a $DB_PASS \
+#     PING
+#   
+#   # Expected: PONG
+#
+# Notes:
+#   - Database MUST have TLS enabled (tlsMode: enabled)
+#   - Client MUST support SNI (Server Name Indication)
+#   - Client connects to port 443 (not the database port 12000)
+#   - Istio routes based on SNI to the correct backend port
+
