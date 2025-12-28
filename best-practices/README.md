@@ -19,17 +19,50 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 ### Cluster Design
 
 ✅ **DO:**
-- Use minimum 3 nodes for quorum
+- Use minimum 3 nodes (pods) for quorum - **ALWAYS**
 - Deploy across multiple availability zones
-- Use pod anti-affinity to spread pods
+- Use pod anti-affinity to spread pods (enabled by default)
+- **Always have a spare Kubernetes node available in the same AZ** to schedule REC pods when a node is lost
 - Separate namespaces for different environments
+- **Use one namespace per REC** (one Redis Enterprise Operator per namespace)
 - Use dedicated node pools for Redis workloads
+- Know that there will **always only be one RE pod per K8s node** (anti-affinity)
+- Know that the **pod disruption budget corresponds to quorum**
+- **Practice generating logs using log_collector script** before you run into issues
+- Enable rack-zone awareness for improved availability during zone failures
+- Ensure **Guaranteed QoS** by setting limits = requests for CPU and memory
 
 ❌ **DON'T:**
 - Run single-node clusters in production
 - Deploy all pods in same zone
 - Mix Redis with other critical workloads
 - Use default namespace
+- **NEVER scale REC StatefulSet to 0** (never stop all pods)
+- **NEVER make any changes to the REC's StatefulSet directly**
+- **NEVER take an RE pod down before all RE pods are fully ready**
+
+### Rack-Zone Awareness
+
+✅ **DO:**
+- Enable rack awareness with `rackAwarenessNodeLabel: topology.kubernetes.io/zone`
+- Ensure ALL eligible nodes have the topology label
+- Grant operator ClusterRole to read node labels
+- Use standard `topology.kubernetes.io/zone` label (set by most platforms)
+
+⚠️ **IMPORTANT LIMITATION:**
+- **Pod restart distribution is NOT maintained automatically**
+- After pod restarts, rack awareness policy may be violated
+- Manual intervention required to restore proper shard distribution
+- Redis Enterprise provides tools to identify shards needing redistribution
+- No automated orchestration for shard moves
+- **Plan operational procedures** for handling rack awareness violations
+- **Critical for edge deployments** where automated recovery is preferred
+- **Monitor for rack awareness constraint violations** after pod restarts
+
+❌ **DON'T:**
+- Enable rack awareness without labeling all eligible nodes (reconciliation will fail)
+- Assume rack distribution is maintained after pod restarts
+- Deploy at scale without operational procedures for shard redistribution
 
 ### Database Design
 
@@ -39,6 +72,10 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 - Set memory limits with 20% buffer
 - Use sharding for datasets > 50GB
 - Enable persistence (AOF) for critical data
+- **When creating a DB using REDB, the REDB manifest is the source of truth**
+- **Database changes MUST be made in the REDB manifest**, not in the UI or API
+- Exception: Changes not yet supported in REDB CRD can be made via UI/API
+- **Deploy the REDB admission controller** - it is highly recommended (automatically deployed if OLM is used)
 
 ❌ **DON'T:**
 - Disable replication in production
@@ -46,6 +83,7 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 - Set memory limits too tight
 - Use single shard for large datasets
 - Disable persistence for important data
+- **NEVER use Admin UI to create databases** - always use REDB CRD for GitOps compatibility
 
 ---
 
@@ -92,9 +130,12 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 ✅ **DO:**
 - Deploy 3+ nodes across zones
 - Enable automatic failover
-- Use persistent volumes with replication
+- **Use persistent volumes with replication (block storage only)**
 - Configure pod disruption budgets
 - Test failover procedures regularly
+- **Minimum pod size: 4000m CPU and 15GB memory**
+- **Use EBS volumes in the same Availability Zone as the hosts** (AWS)
+- Ensure Kubernetes worker nodes use NTP for clock synchronization
 
 ❌ **DON'T:**
 - Use 2-node clusters (no quorum)
@@ -102,6 +143,8 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 - Use local storage only
 - Skip failover testing
 - Ignore backup procedures
+- **NEVER use NFS storage for persistence** - only block storage (EBS, PD, Azure Disk)
+- **NEVER change PVC after deployment** (possible from 7.4+, but avoid)
 
 ### Disaster Recovery
 
@@ -128,9 +171,13 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 ✅ **DO:**
 - Set appropriate CPU/memory requests
 - Use resource limits to prevent noisy neighbors
+- **Set limits = requests for Guaranteed QoS** (prevents eviction)
 - Monitor resource usage continuously
 - Scale proactively based on trends
 - Use node affinity for performance-critical workloads
+- **Use PriorityClass** to prevent preemption by lower-priority workloads
+- Configure eviction thresholds appropriately (soft > hard)
+- Monitor node conditions (MemoryPressure, DiskPressure)
 
 ❌ **DON'T:**
 - Omit resource requests/limits
@@ -138,6 +185,7 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 - Wait for performance issues to scale
 - Ignore resource usage trends
 - Mix performance tiers on same nodes
+- Use Burstable or Best Effort QoS for production (risk of eviction)
 
 ### Database Optimization
 
@@ -154,6 +202,66 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 - Use inefficient data structures
 - Ignore slow query logs
 - Use very long key names
+
+---
+
+## 🖥️ Node Management
+
+### Node Selection & Isolation
+
+✅ **DO:**
+- Use **nodeSelector** to target specific node pools or high-memory nodes
+- Use **taints + tolerations** to reserve nodes exclusively for Redis Enterprise
+- Label nodes appropriately before deployment
+- Use dedicated node pools for production Redis workloads
+- Combine nodeSelector + tolerations for strict isolation
+- Verify pod placement after deployment
+
+❌ **DON'T:**
+- Mix Redis Enterprise with other critical workloads on same nodes
+- Forget to label nodes before using nodeSelector
+- Use taints without corresponding tolerations in REC spec
+
+### Quality of Service (QoS)
+
+✅ **DO:**
+- Ensure **Guaranteed QoS** by setting limits = requests for CPU and memory
+- Verify QoS class: `kubectl get pod rec-0 -o jsonpath="{.status.qosClass}"`
+- Apply same limits = requests to sidecar containers
+- Monitor for pod evictions
+
+❌ **DON'T:**
+- Use Burstable QoS (limits > requests) for production
+- Use Best Effort QoS (no limits/requests) - pods will be evicted first
+- Forget to check sidecar container resources
+
+### Eviction Thresholds
+
+✅ **DO:**
+- Set **soft eviction threshold HIGHER** than hard eviction threshold
+- Set **eviction-soft-grace-period** high enough for administrator to scale cluster
+- Set **eviction-max-pod-grace-period** high enough for Redis to migrate databases
+- Configure platform-specific eviction settings (OpenShift, GKE, EKS)
+- Monitor node conditions (MemoryPressure, DiskPressure)
+
+❌ **DON'T:**
+- Use default eviction thresholds without review
+- Set grace periods too low (causes forced pod termination)
+- Ignore MemoryPressure or DiskPressure warnings
+
+### Resource Quotas
+
+✅ **DO:**
+- Apply ResourceQuota to prevent runaway resource consumption
+- Calculate quota based on: REC nodes + operator + databases + buffer
+- Monitor quota usage regularly
+- Adjust quota as workload grows
+- Include operator minimum resources (500m CPU, 256Mi memory) in calculations
+
+❌ **DON'T:**
+- Deploy without resource quotas in multi-tenant environments
+- Set quota too tight (prevents scaling)
+- Forget to include operator resources in quota calculations
 
 ---
 
@@ -183,6 +291,9 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 - Monitor during maintenance
 - Verify health after changes
 - Document all changes
+- **Drain nodes one at a time** (maintain quorum)
+- **Wait for all pods to be ready** before proceeding to next node
+- **Set operator upgrades to manual** (especially on OpenShift OLM)
 
 ❌ **DON'T:**
 - Perform unscheduled maintenance
@@ -190,6 +301,8 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 - Skip post-change verification
 - Forget to document changes
 - Rush through maintenance
+- **NEVER use automatic operator upgrades on OpenShift OLM** (set to manual)
+- **NEVER drain multiple nodes simultaneously** (breaks quorum)
 
 ---
 

@@ -40,9 +40,15 @@ spec:
     # volumeSize: "100Gi"
   
   # Node resource allocation
-  # Minimum resources for testing on 4 vCPU / 16Gi nodes
-  # This allows multiple pods per node with system overhead
-  # For production, increase based on workload requirements
+  #
+  # ⚠️ IMPORTANT: Minimum recommended resources per pod for PRODUCTION:
+  # - CPU: 4000m (4 cores)
+  # - Memory: 15Gi
+  #
+  # This configuration uses LOWER resources for TESTING/DEV only.
+  # For production deployments, use the recommended minimums above.
+  #
+  # Testing/Dev resources (current config):
   redisEnterpriseNodeResources:
     limits:
       cpu: "1000m"
@@ -50,6 +56,15 @@ spec:
     requests:
       cpu: "1000m"
       memory: 4Gi
+
+  # Production resources (recommended):
+  # redisEnterpriseNodeResources:
+  #   limits:
+  #     cpu: "4000m"      # Minimum 4 cores for production
+  #     memory: 16Gi      # Minimum 15Gi for production (16Gi for headroom)
+  #   requests:
+  #     cpu: "4000m"
+  #     memory: 15Gi
   
   # Rack awareness for zone distribution
   # Uses the standard Kubernetes zone label

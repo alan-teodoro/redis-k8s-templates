@@ -1,0 +1,180 @@
+# Node Selection for Redis Enterprise Cluster
+#
+# This file demonstrates how to control where REC pods are scheduled using:
+# 1. nodeSelector - Target specific nodes or node pools
+# 2. Taints + Tolerations - Reserve nodes exclusively for Redis Enterprise
+#
+# Use cases:
+# - Dedicated node pools for Redis workloads
+# - High-memory nodes for Redis Enterprise
+# - Separate dev/test/prod environments
+# - Cloud provider node pool targeting (GKE, AKS, EKS)
+#
+# Prerequisites:
+# 1. Nodes labeled appropriately
+# 2. Taints applied to reserved nodes (if using tolerations)
+#
+# Apply with: kubectl apply -f 06-node-selection.yaml
+
+---
+# Example 1: Using nodeSelector to target high-memory nodes
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-high-memory
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  # Target nodes labeled with memory=high
+  # First, label your nodes:
+  # kubectl label nodes node1 memory=high
+  # kubectl label nodes node2 memory=high
+  # kubectl label nodes node3 memory=high
+  nodeSelector:
+    memory: high
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4000m"
+      memory: 15Gi
+    requests:
+      cpu: "4000m"
+      memory: 15Gi
+
+---
+# Example 2: Using nodeSelector to target cloud provider node pools
+#
+# GKE Example:
+# apiVersion: app.redislabs.com/v1
+# kind: RedisEnterpriseCluster
+# metadata:
+#   name: rec-gke-pool
+#   namespace: redis-enterprise
+# spec:
+#   nodes: 3
+#   nodeSelector:
+#     cloud.google.com/gke-nodepool: redis-pool
+#
+# AKS Example:
+# apiVersion: app.redislabs.com/v1
+# kind: RedisEnterpriseCluster
+# metadata:
+#   name: rec-aks-pool
+#   namespace: redis-enterprise
+# spec:
+#   nodes: 3
+#   nodeSelector:
+#     agentpool: redispool
+#
+# EKS Example:
+# apiVersion: app.redislabs.com/v1
+# kind: RedisEnterpriseCluster
+# metadata:
+#   name: rec-eks-pool
+#   namespace: redis-enterprise
+# spec:
+#   nodes: 3
+#   nodeSelector:
+#     eks.amazonaws.com/nodegroup: redis-nodegroup
+
+---
+# Example 3: Using Taints + Tolerations to reserve nodes for Redis Enterprise
+#
+# Step 1: Taint nodes to reserve them for Redis Enterprise
+# kubectl taint nodes node1 db=redis:NoSchedule
+# kubectl taint nodes node2 db=redis:NoSchedule
+# kubectl taint nodes node3 db=redis:NoSchedule
+#
+# This prevents other pods from being scheduled on these nodes
+# unless they have a matching toleration.
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-dedicated
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  # Tolerate the db=redis:NoSchedule taint
+  podTolerations:
+  - key: db
+    operator: Equal
+    value: redis
+    effect: NoSchedule
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4000m"
+      memory: 15Gi
+    requests:
+      cpu: "4000m"
+      memory: 15Gi
+
+---
+# Example 4: Combining nodeSelector + Tolerations for strict isolation
+#
+# Use case: Reserve high-memory nodes exclusively for Redis Enterprise
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-isolated
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  # Target high-memory nodes
+  nodeSelector:
+    memory: high
+  
+  # Tolerate taint on high-memory nodes
+  podTolerations:
+  - key: workload
+    operator: Equal
+    value: redis-enterprise
+    effect: NoSchedule
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "8000m"
+      memory: 30Gi
+    requests:
+      cpu: "8000m"
+      memory: 30Gi
+
+---
+# Example 5: Multiple tolerations for complex scenarios
+#
+# Use case: Tolerate multiple taints (e.g., role=database + env=production)
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-multi-taint
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  podTolerations:
+  # Tolerate role=database taint
+  - key: role
+    operator: Equal
+    value: database
+    effect: NoSchedule
+  
+  # Tolerate env=production taint
+  - key: env
+    operator: Equal
+    value: production
+    effect: NoSchedule
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4000m"
+      memory: 15Gi
+    requests:
+      cpu: "4000m"
+      memory: 15Gi
+

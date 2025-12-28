@@ -61,7 +61,8 @@ redis-k8s-templates/
 ├── operations/                 # Operational guides
 │   ├── ha-disaster-recovery/   # HA & DR strategies
 │   ├── troubleshooting/        # Troubleshooting guides
-│   └── capacity-planning/      # Capacity planning & sizing
+│   ├── capacity-planning/      # Capacity planning & sizing
+│   └── node-management/        # Node selection, QoS, eviction thresholds
 │
 └── best-practices/             # Best practices guide
 ```
@@ -148,6 +149,7 @@ Configure essential components for production:
 |-------|-------|-------------|
 | **Troubleshooting** | [operations/troubleshooting/](operations/troubleshooting/) | Common issues and solutions |
 | **Capacity Planning** | [operations/capacity-planning/](operations/capacity-planning/) | Resource sizing and planning |
+| **Node Management** | [operations/node-management/](operations/node-management/) | Node selection, QoS, eviction thresholds, resource quotas |
 | **Best Practices** | [best-practices/](best-practices/) | Production best practices |
 
 ### 🔗 Integrations

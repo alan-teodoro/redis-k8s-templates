@@ -4,6 +4,7 @@ Comprehensive troubleshooting guide for common issues with Redis Enterprise on K
 
 ## 📋 Table of Contents
 
+- [Forbidden Actions](#-forbidden-actions-never-do-this)
 - [Quick Diagnostics](#quick-diagnostics)
 - [Common Issues](#common-issues)
 - [Cluster Issues](#cluster-issues)
@@ -12,6 +13,160 @@ Comprehensive troubleshooting guide for common issues with Redis Enterprise on K
 - [Network Issues](#network-issues)
 - [Storage Issues](#storage-issues)
 - [Operator Issues](#operator-issues)
+
+---
+
+## ⛔ FORBIDDEN ACTIONS (NEVER DO THIS!)
+
+**These actions can cause catastrophic failures, data loss, or cluster corruption. NEVER do any of these:**
+
+### 🚨 Critical - Will Break Cluster
+
+1. **❌ NEVER scale REC StatefulSet to 0**
+   ```bash
+   # ❌ DON'T DO THIS - Will destroy cluster!
+   kubectl scale statefulset rec --replicas=0 -n redis-enterprise
+   ```
+   **Why:** This stops all Redis Enterprise pods simultaneously, breaking quorum and potentially corrupting data.
+
+   **Instead:** If you need to delete the cluster, use proper deletion:
+   ```bash
+   # ✅ Proper way to delete cluster
+   kubectl delete rec rec -n redis-enterprise
+   ```
+
+2. **❌ NEVER force-delete REC pods**
+   ```bash
+   # ❌ DON'T DO THIS - Can corrupt cluster state!
+   kubectl delete pod rec-0 --force --grace-period=0 -n redis-enterprise
+   ```
+   **Why:** Force deletion bypasses graceful shutdown, can corrupt data and cluster state.
+
+   **Instead:** Let pods terminate gracefully:
+   ```bash
+   # ✅ Proper way to delete pod
+   kubectl delete pod rec-0 -n redis-enterprise
+   # Wait for graceful termination (may take 30-60 seconds)
+   ```
+
+3. **❌ NEVER edit REC StatefulSet directly**
+   ```bash
+   # ❌ DON'T DO THIS - Operator will revert changes!
+   kubectl edit statefulset rec -n redis-enterprise
+   ```
+   **Why:** The operator manages the StatefulSet. Manual changes will be reverted and can cause conflicts.
+
+   **Instead:** Edit the REC custom resource:
+   ```bash
+   # ✅ Proper way to modify cluster
+   kubectl edit rec rec -n redis-enterprise
+   ```
+
+4. **❌ NEVER take down a pod before all pods are ready**
+   ```bash
+   # ❌ DON'T DO THIS - Can break quorum!
+   kubectl delete pod rec-0 -n redis-enterprise
+   # Immediately deleting rec-1 before rec-0 is back
+   kubectl delete pod rec-1 -n redis-enterprise
+   ```
+   **Why:** This can break quorum (need 2 out of 3 pods for majority).
+
+   **Instead:** Wait for pod to be ready before proceeding:
+   ```bash
+   # ✅ Proper way to restart pods
+   kubectl delete pod rec-0 -n redis-enterprise
+   kubectl wait --for=condition=ready pod/rec-0 -n redis-enterprise --timeout=300s
+   # Now safe to proceed to next pod
+   kubectl delete pod rec-1 -n redis-enterprise
+   ```
+
+5. **❌ NEVER drain multiple nodes simultaneously**
+   ```bash
+   # ❌ DON'T DO THIS - Will break quorum!
+   kubectl drain node1 node2 node3 --ignore-daemonsets
+   ```
+   **Why:** Draining multiple nodes at once can evict multiple REC pods, breaking quorum.
+
+   **Instead:** Drain nodes one at a time:
+   ```bash
+   # ✅ Proper way to drain nodes
+   kubectl drain node1 --ignore-daemonsets --delete-emptydir-data
+   kubectl wait --for=condition=ready pod -l app=redis-enterprise -n redis-enterprise --timeout=300s
+   kubectl drain node2 --ignore-daemonsets --delete-emptydir-data
+   kubectl wait --for=condition=ready pod -l app=redis-enterprise -n redis-enterprise --timeout=300s
+   ```
+
+### 🚨 Critical - Database Management
+
+6. **❌ NEVER create databases via Admin UI or API when using REDB**
+   ```bash
+   # ❌ DON'T DO THIS - Creates configuration drift!
+   # Creating database via UI or curl to API
+   ```
+   **Why:** When using REDB CRD, the REDB manifest is the source of truth. Creating databases via UI/API causes drift.
+
+   **Instead:** Always use REDB CRD:
+   ```bash
+   # ✅ Proper way to create database
+   kubectl apply -f redb.yaml
+   ```
+
+   **Exception:** Only use UI/API for features not yet supported in REDB CRD.
+
+7. **❌ NEVER change PVC after deployment**
+   ```bash
+   # ❌ DON'T DO THIS - Can cause data loss!
+   kubectl edit pvc redis-enterprise-storage-rec-0 -n redis-enterprise
+   ```
+   **Why:** Changing PVC can cause data loss or corruption.
+
+   **Note:** PVC changes are possible from Redis Enterprise 7.4+, but should be avoided.
+
+### 🚨 Critical - Storage
+
+8. **❌ NEVER use NFS for persistence**
+   ```yaml
+   # ❌ DON'T DO THIS - NFS is not supported!
+   persistentSpec:
+     storageClassName: nfs-storage  # ❌ WRONG!
+   ```
+   **Why:** NFS has performance and consistency issues. Only block storage is supported.
+
+   **Instead:** Use block storage:
+   ```yaml
+   # ✅ Use block storage (EBS, Persistent Disk, Azure Disk)
+   persistentSpec:
+     storageClassName: gp3  # ✅ AWS EBS
+     # or: pd-ssd  # ✅ GCP Persistent Disk
+     # or: managed-premium  # ✅ Azure Disk
+   ```
+
+### 🚨 Important - Operator Management
+
+9. **❌ NEVER enable automatic operator upgrades (OpenShift OLM)**
+   ```yaml
+   # ❌ DON'T DO THIS in OLM subscription
+   installPlanApproval: Automatic  # ❌ WRONG!
+   ```
+   **Why:** Automatic upgrades can happen during business hours, causing unexpected downtime.
+
+   **Instead:** Use manual approval:
+   ```yaml
+   # ✅ Use manual approval for operator upgrades
+   installPlanApproval: Manual  # ✅ CORRECT!
+   ```
+
+10. **❌ NEVER skip log collection practice**
+    ```bash
+    # ❌ DON'T wait for production issues to learn log_collector
+    ```
+    **Why:** In production incidents, you need to know how to collect logs quickly.
+
+    **Instead:** Practice log collection in non-prod:
+    ```bash
+    # ✅ Practice log collection before issues occur
+    kubectl exec -it rec-0 -n redis-enterprise -- /opt/redislabs/bin/rladmin cluster debug_info
+    ```
 
 ---
 

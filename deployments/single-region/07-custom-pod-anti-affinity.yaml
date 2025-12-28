@@ -1,0 +1,217 @@
+# Custom Pod Anti-Affinity for Redis Enterprise Cluster
+#
+# By default, REC ensures only one REC pod per node within the same cluster.
+# This file shows how to customize anti-affinity rules for advanced scenarios.
+#
+# Use cases:
+# 1. Prevent different REC clusters from sharing nodes
+# 2. Prevent Redis from co-locating with other database workloads
+# 3. Spread pods across availability zones
+# 4. Custom topology constraints
+#
+# Apply with: kubectl apply -f 07-custom-pod-anti-affinity.yaml
+
+---
+# Default Anti-Affinity (for reference)
+#
+# This is what REC uses by default:
+#
+# podAntiAffinity:
+#   requiredDuringSchedulingIgnoredDuringExecution:
+#   - labelSelector:
+#       matchLabels:
+#         app: redis-enterprise
+#         redis.io/cluster: rec
+#         redis.io/role: node
+#     topologyKey: kubernetes.io/hostname
+#
+# This ensures only one pod from the SAME cluster per node.
+# Different clusters CAN share nodes.
+
+---
+# Example 1: Prevent ALL Redis Enterprise pods from sharing nodes
+# (across different clusters)
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-strict-isolation
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  # Custom anti-affinity: one Redis Enterprise pod per node (any cluster)
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchLabels:
+          app: redis-enterprise
+          redis.io/role: node
+      topologyKey: kubernetes.io/hostname
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4000m"
+      memory: 15Gi
+    requests:
+      cpu: "4000m"
+      memory: 15Gi
+
+---
+# Example 2: Prevent co-location with other database workloads
+# (e.g., PostgreSQL, MongoDB, MySQL)
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-no-db-colocation
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  # Label this REC as a database workload
+  extraLabels:
+    workload-type: database
+  
+  # Prevent co-location with any pod labeled workload-type=database
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    # Rule 1: No two REC pods from same cluster on same node
+    - labelSelector:
+        matchLabels:
+          app: redis-enterprise
+          redis.io/cluster: rec-no-db-colocation
+          redis.io/role: node
+      topologyKey: kubernetes.io/hostname
+    
+    # Rule 2: No database workloads on same node
+    - labelSelector:
+        matchLabels:
+          workload-type: database
+      topologyKey: kubernetes.io/hostname
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4000m"
+      memory: 15Gi
+    requests:
+      cpu: "4000m"
+      memory: 15Gi
+
+---
+# Example 3: Spread pods across availability zones
+# (in addition to spreading across nodes)
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-zone-spread
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    # Rule 1: One pod per node (same cluster)
+    - labelSelector:
+        matchLabels:
+          app: redis-enterprise
+          redis.io/cluster: rec-zone-spread
+          redis.io/role: node
+      topologyKey: kubernetes.io/hostname
+    
+    # Rule 2: Prefer spreading across zones
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchLabels:
+            app: redis-enterprise
+            redis.io/cluster: rec-zone-spread
+            redis.io/role: node
+        topologyKey: topology.kubernetes.io/zone
+  
+  # Enable rack awareness for zone distribution
+  rackAwarenessNodeLabel: topology.kubernetes.io/zone
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4000m"
+      memory: 15Gi
+    requests:
+      cpu: "4000m"
+      memory: 15Gi
+
+---
+# Example 4: Soft anti-affinity (preferred, not required)
+# Use when you want to spread pods but allow co-location if necessary
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-soft-spread
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  podAntiAffinity:
+    # Prefer not to co-locate, but allow if no other nodes available
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchLabels:
+            app: redis-enterprise
+            redis.io/cluster: rec-soft-spread
+            redis.io/role: node
+        topologyKey: kubernetes.io/hostname
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4000m"
+      memory: 15Gi
+    requests:
+      cpu: "4000m"
+      memory: 15Gi
+
+---
+# Example 5: Multi-tier anti-affinity
+# Separate production and development clusters
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-production
+  namespace: redis-enterprise-prod
+spec:
+  nodes: 3
+  
+  # Label as production
+  extraLabels:
+    environment: production
+    workload-type: database
+  
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    # Rule 1: One pod per node (same cluster)
+    - labelSelector:
+        matchLabels:
+          app: redis-enterprise
+          redis.io/cluster: rec-production
+          redis.io/role: node
+      topologyKey: kubernetes.io/hostname
+    
+    # Rule 2: No development workloads on production nodes
+    - labelSelector:
+        matchLabels:
+          environment: development
+      topologyKey: kubernetes.io/hostname
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "8000m"
+      memory: 30Gi
+    requests:
+      cpu: "8000m"
+      memory: 30Gi
+

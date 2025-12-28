@@ -47,11 +47,32 @@ Complete guide for HA and DR strategies for Redis Enterprise on Kubernetes.
 
 ### HA Components
 
-1. **Multi-Node Cluster** (minimum 3 nodes)
+1. **Multi-Node Cluster** (minimum 3 nodes/pods)
 2. **Database Replication** (master-replica)
 3. **Automatic Failover**
-4. **Pod Anti-Affinity** (spread across nodes/zones)
-5. **Persistent Storage** (replicated volumes)
+4. **Pod Anti-Affinity** (spread across nodes/zones - enabled by default)
+5. **Persistent Storage** (replicated volumes - block storage only, NEVER NFS)
+6. **Spare Node Strategy** (always have 1+ spare K8s node per AZ)
+7. **PodDisruptionBudget** (maintains quorum during voluntary disruptions)
+8. **PriorityClass** (prevents preemption by lower-priority workloads)
+
+### 🔑 Critical HA Requirements
+
+**✅ MUST HAVE:**
+- **Minimum 3 REC pods** for quorum (ALWAYS)
+- **One REC pod per Kubernetes node** (anti-affinity enforced by default)
+- **Spare Kubernetes node in each AZ** to handle node failures
+- **Block storage only** (EBS, Persistent Disk, Azure Disk) - NEVER NFS
+- **Minimum pod resources:** 4000m CPU, 15GB memory
+- **PodDisruptionBudget** to protect quorum during drains
+- **Clock synchronization** (NTP) on all worker nodes
+
+**❌ NEVER:**
+- Scale REC StatefulSet to 0 (never stop all pods)
+- Use 2-node clusters (no quorum)
+- Use NFS for persistence
+- Drain multiple nodes simultaneously (breaks quorum)
+- Make changes to REC StatefulSet directly
 
 ---
 
@@ -107,13 +128,39 @@ Complete guide for HA and DR strategies for Redis Enterprise on Kubernetes.
 See: [01-ha-cluster.yaml](01-ha-cluster.yaml)
 
 **Features:**
-- 3+ node cluster
+- 3+ node cluster (minimum 3 REC pods)
 - Database replication
-- Pod anti-affinity
-- Persistent storage
+- Pod anti-affinity (enabled by default - one REC pod per K8s node)
+- Persistent storage (block storage only - NEVER NFS)
+- PodDisruptionBudget to maintain quorum
+- PriorityClass to prevent preemption
+
+**Spare Node Strategy:**
+
+For a 3-node REC cluster across 3 AZs, you need **minimum 4 Kubernetes worker nodes**:
+
+```
+AZ-1: 2 nodes (1 for REC pod, 1 spare)
+AZ-2: 1 node (1 for REC pod)
+AZ-3: 1 node (1 for REC pod)
+```
+
+**Why?** If a node in AZ-1 fails, the REC pod can be rescheduled to the spare node in AZ-1, maintaining the 3-pod quorum.
+
+**Best Practice:** Have at least 1 spare node per AZ:
+
+```
+AZ-1: 2 nodes (1 REC pod + 1 spare)
+AZ-2: 2 nodes (1 REC pod + 1 spare)
+AZ-3: 2 nodes (1 REC pod + 1 spare)
+Total: 6 nodes for 3-pod REC cluster
+```
+
+This ensures you can handle node failures in any AZ without losing quorum.
 
 ```bash
 kubectl apply -f 01-ha-cluster.yaml
+kubectl apply -f 05-pod-disruption-budget.yaml
 ```
 
 ### 2. Backup Configuration

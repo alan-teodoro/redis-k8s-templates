@@ -6,25 +6,61 @@ Generic deployment for Redis Enterprise Cluster and Database in a single Kuberne
 
 ---
 
+## ⚠️ IMPORTANT: REDB is Source of Truth
+
+When using **REDB (RedisEnterpriseDatabase) CRD** to manage databases:
+
+**✅ DO:**
+- **ALL database changes MUST be made in the REDB manifest**
+- Use `kubectl apply -f redb.yaml` to create and update databases
+- Commit REDB manifests to Git for GitOps workflows
+- Use REDB for all database lifecycle management
+
+**❌ DON'T:**
+- **NEVER create databases via Admin UI** when using REDB
+- **NEVER make changes via API** when using REDB
+- **NEVER mix REDB and UI/API management** (causes configuration drift)
+
+**Exception:** Only use UI/API for features not yet supported in REDB CRD.
+
+**Why?** REDB ensures:
+- GitOps compatibility (infrastructure as code)
+- Configuration consistency (no drift)
+- Audit trail (all changes in Git)
+- Automated deployments (CI/CD pipelines)
+
+---
+
 ## Prerequisites
 
 - Kubernetes cluster running
 - Redis Enterprise Operator installed ([operator/README.md](../../operator/README.md))
 - Storage configured (see your platform's README)
 - Namespace created
+- **REDB Admission Controller deployed** (highly recommended - validates REDB manifests)
 
 ---
 
 ## Files
+
+### Core Deployment Files
 
 | File | Description |
 |------|-------------|
 | `00-namespace.yaml` | Namespace creation |
 | `01-rec-admin-secret.yaml` | REC admin credentials (username: admin@redis.com, password: RedisAdmin123!) |
 | `02-redb-secret.yaml` | Database password (RedisAdmin123!) |
+| `03-priority-class.yaml` | PriorityClass to prevent pod preemption |
 | `03-rbac-rack-awareness.yaml` | RBAC for multi-AZ rack awareness |
 | `04-rec.yaml` | Redis Enterprise Cluster (3 nodes) |
 | `05-redb.yaml` | Redis Database (test-db, port 12000) |
+
+### Advanced Configuration Files (Optional)
+
+| File | Description |
+|------|-------------|
+| `06-node-selection.yaml` | Examples of nodeSelector, taints, and tolerations |
+| `07-custom-pod-anti-affinity.yaml` | Custom anti-affinity rules for advanced scenarios |
 
 **⚠️ IMPORTANT:** Change passwords before production deployment!
 

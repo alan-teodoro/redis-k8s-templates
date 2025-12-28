@@ -1,0 +1,117 @@
+---
+# PodDisruptionBudget for Redis Enterprise Cluster
+#
+# This PDB ensures that during voluntary disruptions (node drains, upgrades, etc.),
+# the cluster maintains quorum by preventing too many pods from being evicted simultaneously.
+#
+# CRITICAL: The PDB corresponds to quorum requirements:
+# - 3-node cluster: maxUnavailable=1 (allows 1 pod down, maintains 2 for quorum)
+# - 5-node cluster: maxUnavailable=2 (allows 2 pods down, maintains 3 for quorum)
+#
+# Apply:
+#   kubectl apply -f 05-pod-disruption-budget.yaml
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rec-pdb
+  namespace: redis-enterprise
+spec:
+  # For 3-node cluster: allow max 1 pod to be unavailable
+  # This ensures quorum is maintained (2 pods always available)
+  maxUnavailable: 1
+  
+  selector:
+    matchLabels:
+      app: redis-enterprise
+      redis.io/cluster: rec
+
+---
+# Alternative: Using minAvailable instead of maxUnavailable
+#
+# For 3-node cluster: require minimum 2 pods available (quorum)
+# For 5-node cluster: require minimum 3 pods available (quorum)
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rec-pdb-minavailable
+  namespace: redis-enterprise
+spec:
+  # For 3-node cluster: require minimum 2 pods available (quorum)
+  minAvailable: 2
+  
+  selector:
+    matchLabels:
+      app: redis-enterprise
+      redis.io/cluster: rec
+
+---
+# Verification Commands
+#
+# Check PDB status:
+#   kubectl get pdb -n redis-enterprise
+#
+# Check PDB details:
+#   kubectl describe pdb rec-pdb -n redis-enterprise
+#
+# Expected output:
+#   NAME      MIN AVAILABLE   MAX UNAVAILABLE   ALLOWED DISRUPTIONS   AGE
+#   rec-pdb   N/A             1                 1                     10m
+#
+# Test PDB during node drain:
+#   kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data
+#
+# The drain will wait if it would violate the PDB (good!)
+# You should see: "evicting pod redis-enterprise/rec-0"
+# And it will wait for the pod to be rescheduled before draining more pods.
+
+---
+# IMPORTANT NOTES:
+#
+# 1. PDB only protects against VOLUNTARY disruptions:
+#    - Node drains (kubectl drain)
+#    - Cluster autoscaler scale-downs
+#    - Rolling updates
+#
+# 2. PDB does NOT protect against INVOLUNTARY disruptions:
+#    - Node failures
+#    - Out-of-memory kills
+#    - Hardware failures
+#
+# 3. Always drain nodes ONE AT A TIME:
+#    ✅ DO: kubectl drain node1 && wait && kubectl drain node2
+#    ❌ DON'T: kubectl drain node1 node2 node3 (breaks quorum!)
+#
+# 4. Wait for all pods to be ready before draining next node:
+#    kubectl wait --for=condition=ready pod -l app=redis-enterprise -n redis-enterprise --timeout=300s
+#
+# 5. For 3-node clusters:
+#    - maxUnavailable: 1 (recommended)
+#    - minAvailable: 2 (alternative)
+#
+# 6. For 5-node clusters:
+#    - maxUnavailable: 2 (recommended)
+#    - minAvailable: 3 (alternative)
+#
+# 7. For production, use maxUnavailable=1 for maximum safety,
+#    even on larger clusters (slower drains, but safer).
+
+---
+# Troubleshooting
+#
+# If drain is stuck:
+#   kubectl get pdb -n redis-enterprise
+#   kubectl describe pdb rec-pdb -n redis-enterprise
+#
+# Check if PDB is blocking:
+#   ALLOWED DISRUPTIONS: 0  <- PDB is blocking (wait for pod to be ready)
+#   ALLOWED DISRUPTIONS: 1  <- PDB allows drain to proceed
+#
+# Force drain (DANGEROUS - only in emergencies):
+#   kubectl drain <node> --ignore-daemonsets --delete-emptydir-data --disable-eviction --force
+#   ⚠️ WARNING: This bypasses PDB and can break quorum!
+#
+# Uncordon node after drain:
+#   kubectl uncordon <node-name>
+

@@ -1,0 +1,147 @@
+---
+# PriorityClass for Redis Enterprise
+#
+# PriorityClass ensures that Redis Enterprise pods are not preempted by lower-priority workloads.
+# This is critical for production databases to prevent eviction during resource pressure.
+#
+# Priority values:
+# - System critical: 2000000000 (reserved for system pods like kube-dns)
+# - High priority: 1000000 (recommended for Redis Enterprise)
+# - Medium priority: 100000 (application workloads)
+# - Low priority: 0 (default, batch jobs)
+#
+# Apply:
+#   kubectl apply -f 03-priority-class.yaml
+
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: redis-enterprise-high-priority
+value: 1000000
+globalDefault: false
+description: "High priority for Redis Enterprise cluster pods to prevent preemption"
+
+---
+# PriorityClass for Redis Enterprise Databases
+#
+# Slightly lower priority than cluster pods, but still high priority.
+
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: redis-database-high-priority
+value: 900000
+globalDefault: false
+description: "High priority for Redis database pods to prevent preemption"
+
+---
+# Example: REC with PriorityClass
+#
+# Add priorityClassName to REC spec to use the PriorityClass.
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  # Assign high priority to prevent preemption
+  priorityClassName: redis-enterprise-high-priority
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: 4000m
+      memory: 16Gi
+    requests:
+      cpu: 4000m
+      memory: 15Gi
+  
+  persistentSpec:
+    enabled: true
+    storageClassName: gp3
+    volumeSize: 100Gi
+
+---
+# Verification Commands
+#
+# Check PriorityClasses:
+#   kubectl get priorityclasses
+#
+# Expected output:
+#   NAME                              VALUE        GLOBAL-DEFAULT   AGE
+#   redis-enterprise-high-priority    1000000      false            10m
+#   redis-database-high-priority      900000       false            10m
+#   system-cluster-critical           2000000000   false            30d
+#   system-node-critical              2000001000   false            30d
+#
+# Check REC pod priority:
+#   kubectl get pod rec-0 -n redis-enterprise -o jsonpath='{.spec.priority}'
+#
+# Expected output:
+#   1000000
+#
+# Check which PriorityClass is assigned:
+#   kubectl get pod rec-0 -n redis-enterprise -o jsonpath='{.spec.priorityClassName}'
+#
+# Expected output:
+#   redis-enterprise-high-priority
+
+---
+# IMPORTANT NOTES:
+#
+# 1. PriorityClass prevents preemption by LOWER priority pods:
+#    - Redis pods (priority 1000000) will NOT be evicted for default pods (priority 0)
+#    - Redis pods CAN be evicted for system-critical pods (priority 2000000000)
+#
+# 2. PriorityClass does NOT prevent eviction due to:
+#    - Node failures
+#    - Resource limits (OOMKilled)
+#    - Manual deletion
+#    - Node drains (use PodDisruptionBudget for this)
+#
+# 3. Use PriorityClass + PodDisruptionBudget together:
+#    - PriorityClass: prevents preemption by lower-priority workloads
+#    - PodDisruptionBudget: prevents too many voluntary disruptions
+#
+# 4. Recommended priority values:
+#    - Redis Enterprise Cluster: 1000000 (high)
+#    - Redis Databases: 900000 (high, but lower than cluster)
+#    - Application pods: 100000 (medium)
+#    - Batch jobs: 0 (default, can be preempted)
+#
+# 5. DO NOT set priority too high:
+#    ❌ DON'T: Use priority > 1000000 (reserved for system components)
+#    ✅ DO: Use priority = 1000000 for production databases
+#
+# 6. globalDefault: false
+#    - This PriorityClass is NOT applied by default to all pods
+#    - You must explicitly set priorityClassName in pod spec
+#
+# 7. For multi-tenant clusters:
+#    - Create separate PriorityClasses per tenant/environment
+#    - Example: redis-prod (1000000), redis-staging (500000), redis-dev (100000)
+
+---
+# Troubleshooting
+#
+# Check if pod was preempted:
+#   kubectl describe pod rec-0 -n redis-enterprise | grep -i preempt
+#
+# Check pod events for preemption:
+#   kubectl get events -n redis-enterprise --field-selector involvedObject.name=rec-0
+#
+# If pods are being preempted despite PriorityClass:
+#   1. Verify PriorityClass is assigned:
+#      kubectl get pod rec-0 -n redis-enterprise -o jsonpath='{.spec.priorityClassName}'
+#
+#   2. Check priority value:
+#      kubectl get pod rec-0 -n redis-enterprise -o jsonpath='{.spec.priority}'
+#
+#   3. Check what is preempting the pod:
+#      kubectl get events -n redis-enterprise --sort-by='.lastTimestamp'
+#
+#   4. Ensure higher-priority pods are not causing preemption:
+#      kubectl get pods --all-namespaces -o custom-columns=NAME:.metadata.name,PRIORITY:.spec.priority,NAMESPACE:.metadata.namespace --sort-by=.spec.priority
+

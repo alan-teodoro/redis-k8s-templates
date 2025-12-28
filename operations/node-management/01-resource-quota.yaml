@@ -1,0 +1,150 @@
+# Resource Quota for Redis Enterprise Namespace
+#
+# ResourceQuota limits resource consumption per namespace to:
+# - Prevent runaway resource consumption
+# - Enforce resource limits per environment
+# - Enable multi-tenancy isolation
+#
+# This example shows quotas for a production Redis Enterprise deployment
+# with 3 REC nodes (8 CPU, 30GB each) + databases
+#
+# Apply with: kubectl apply -f 01-resource-quota.yaml
+
+---
+# Production Resource Quota
+# Supports: 3 REC nodes (8 CPU, 30GB each) + multiple databases
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: redis-enterprise-prod-quota
+  namespace: redis-enterprise
+spec:
+  hard:
+    # CPU Limits
+    # 3 REC nodes × 8 CPU = 24 CPU
+    # + Operator (0.5 CPU) + Databases (variable)
+    # Total: 32 CPU
+    requests.cpu: "32"
+    limits.cpu: "32"
+    
+    # Memory Limits
+    # 3 REC nodes × 30GB = 90GB
+    # + Operator (256Mi) + Databases (variable)
+    # Total: 120GB
+    requests.memory: 120Gi
+    limits.memory: 120Gi
+    
+    # Pod Limits
+    # 3 REC pods + 1 Operator + databases
+    # Total: 15 pods
+    pods: "15"
+    
+    # PVC Limits
+    # 3 REC PVCs + database PVCs
+    # Total: 15 PVCs
+    persistentvolumeclaims: "15"
+    
+    # Storage Limits
+    # 3 REC PVCs × 150GB (5x 30GB memory) = 450GB
+    # + Database storage
+    # Total: 1TB
+    requests.storage: 1Ti
+
+---
+# Development/Test Resource Quota
+# Supports: 3 REC nodes (2 CPU, 4GB each) + test databases
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: redis-enterprise-dev-quota
+  namespace: redis-enterprise-dev
+spec:
+  hard:
+    # CPU Limits
+    # 3 REC nodes × 2 CPU = 6 CPU
+    # + Operator (0.5 CPU) + Databases
+    # Total: 10 CPU
+    requests.cpu: "10"
+    limits.cpu: "10"
+    
+    # Memory Limits
+    # 3 REC nodes × 4GB = 12GB
+    # + Operator (256Mi) + Databases
+    # Total: 20GB
+    requests.memory: 20Gi
+    limits.memory: 20Gi
+    
+    # Pod Limits
+    pods: "10"
+    
+    # PVC Limits
+    persistentvolumeclaims: "10"
+    
+    # Storage Limits
+    # 3 REC PVCs × 20GB (5x 4GB memory) = 60GB
+    # + Database storage
+    # Total: 200GB
+    requests.storage: 200Gi
+
+---
+# Minimal Resource Quota (for testing operator installation)
+# Supports: Operator only (no REC)
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: redis-operator-quota
+  namespace: redis-enterprise-test
+spec:
+  hard:
+    # Operator minimum requirements
+    requests.cpu: "500m"
+    limits.cpu: "500m"
+    requests.memory: 256Mi
+    limits.memory: 256Mi
+    
+    # Minimal pod/storage limits
+    pods: "5"
+    persistentvolumeclaims: "5"
+    requests.storage: 50Gi
+
+---
+# Verification Commands
+#
+# 1. Apply resource quota:
+#    kubectl apply -f 01-resource-quota.yaml
+#
+# 2. Check quota status:
+#    kubectl describe resourcequota redis-enterprise-prod-quota -n redis-enterprise
+#
+# 3. Check current usage:
+#    kubectl get resourcequota -n redis-enterprise
+#
+# 4. Expected output:
+#    NAME                            AGE   REQUEST                                                                                                      LIMIT
+#    redis-enterprise-prod-quota     1m    persistentvolumeclaims: 3/15, pods: 4/15, requests.cpu: 24500m/32, requests.memory: 90Gi/120Gi, ...        limits.cpu: 24500m/32, limits.memory: 90Gi/120Gi
+#
+# 5. If quota is exceeded, pod creation will fail with:
+#    Error: exceeded quota: redis-enterprise-prod-quota, requested: requests.cpu=8, used: requests.cpu=24, limited: requests.cpu=32
+
+---
+# Important Notes:
+#
+# 1. Resource quotas are enforced at namespace level
+# 2. All pods in namespace count toward quota
+# 3. Quota includes operator + REC + databases
+# 4. Plan quota based on expected workload
+# 5. Monitor quota usage regularly
+# 6. Adjust quota as workload grows
+#
+# 7. Quota does NOT prevent:
+#    - Node resource exhaustion (use LimitRange for that)
+#    - Individual pod resource limits (use LimitRange)
+#    - Cluster-wide resource limits (use ClusterResourceQuota on OpenShift)
+#
+# 8. Quota calculation example (production):
+#    - 3 REC nodes: 3 × 8 CPU × 30GB = 24 CPU, 90GB
+#    - Operator: 0.5 CPU, 256Mi
+#    - 5 databases: 5 × 1 CPU × 2GB = 5 CPU, 10GB
+#    - Buffer: 2.5 CPU, 20GB
+#    - Total: 32 CPU, 120GB
+
