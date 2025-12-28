@@ -69,10 +69,73 @@ kubectl get svc redisinsight-service -n redis-enterprise
 # Deploy RedisInsight
 kubectl apply -f 01-deployment-ephemeral.yaml
 
+# Wait for deployment to be ready
+kubectl wait --for=condition=available deployment/redisinsight -n redis-enterprise --timeout=60s
+
 # Port forward
 kubectl port-forward deployment/redisinsight 5540:5540 -n redis-enterprise
 
 # Access RedisInsight at http://localhost:5540
+```
+
+---
+
+## 🔌 Connecting to Redis Databases
+
+After accessing RedisInsight, you need to add your Redis databases.
+
+### Add Redis Enterprise Database
+
+1. **Get database connection information**:
+```bash
+# Get database service name and port
+kubectl get redb test-db -n redis-enterprise -o custom-columns=NAME:.metadata.name,PORT:.spec.databasePort
+
+# Get database password
+kubectl get secret redb-secret -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d && echo
+```
+
+2. **In RedisInsight UI**:
+   - Click **"Add Redis Database"**
+   - Select **"Add Database Manually"**
+   - Fill in the connection details:
+     - **Host**: `redis-12000.redis-enterprise.svc.cluster.local` (or your database port)
+     - **Port**: `12000` (or your database port)
+     - **Database Alias**: `test-db` (any name)
+     - **Username**: Leave empty (uses default user)
+     - **Password**: Paste the password from step 1
+     - **Use TLS**: ✅ Enable
+     - **Verify TLS Certificate**: ❌ Disable (self-signed cert)
+   - Click **"Add Redis Database"**
+
+3. **Verify connection**:
+   - Database should appear in the list
+   - Click on the database to open the browser
+   - Try running commands in the CLI
+
+### Connection Examples
+
+**Standard REDB (TLS enabled)**:
+```
+Host: redis-<PORT>.redis-enterprise.svc.cluster.local
+Port: <databasePort from REDB spec>
+TLS: Enabled
+Verify Certificate: Disabled
+```
+
+**Development REDB (TLS disabled)**:
+```
+Host: redis-<PORT>.redis-enterprise.svc.cluster.local
+Port: <databasePort from REDB spec>
+TLS: Disabled
+```
+
+**Multi-namespace REDB**:
+```
+Host: redis-<PORT>.redis-enterprise.svc.cluster.local
+Port: <databasePort from REDB spec>
+TLS: Enabled (unless explicitly disabled)
+Verify Certificate: Disabled
 ```
 
 ---
