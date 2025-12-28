@@ -7,7 +7,7 @@
 #   - Replication: Enabled
 #   - Persistence: AOF every-1-sec
 #   - Eviction: volatile-lru
-#   - Port: 12000
+#   - Port: 12001
 #
 # Usage:
 #   kubectl apply -f 04-redb-production.yaml
@@ -43,7 +43,7 @@ spec:
   evictionPolicy: volatile-lru
 
   # Database port
-  databasePort: 12000
+  databasePort: 12001
 
   # TLS enabled for secure connections
   tlsMode: enabled

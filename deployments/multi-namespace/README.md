@@ -153,6 +153,28 @@ You need permissions to:
 - Create ClusterRoles and ClusterRoleBindings
 - Create Roles and RoleBindings in multiple namespaces
 
+### 5. License Considerations
+
+⚠️ **Important**: Each REDB consumes shards from your license:
+- **REDB with replication enabled**: 2 shards (1 master + 1 replica)
+- **REDB with replication disabled**: 1 shard
+
+**Free/Trial License Limit**: Typically 4 shards total
+
+**Planning Example**:
+```
+Production DB (replication: true)   = 2 shards
+Staging DB (replication: false)     = 1 shard
+Development DB (replication: false) = 1 shard
+                                    ─────────
+Total                               = 4 shards ✅
+```
+
+**Check your current shard usage**:
+```bash
+kubectl get redb -A -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,SHARDS:.status.shardCount,REPLICATION:.spec.replication
+```
+
 ---
 
 ## Deployment Guide
@@ -218,6 +240,12 @@ kubectl patch ConfigMap/operator-environment-config \
 
 ⚠️ **Note**: The operator will restart when ConfigMap is updated.
 
+**Verify operator restart**:
+```bash
+kubectl rollout restart deployment redis-enterprise-operator -n redis-enterprise
+kubectl rollout status deployment redis-enterprise-operator -n redis-enterprise --timeout=60s
+```
+
 #### Step 5: Label Consumer Namespaces
 
 ```bash
@@ -238,22 +266,51 @@ kubectl get configmap operator-environment-config -n redis-enterprise -o yaml | 
 # Check namespace labels
 kubectl get namespaces --show-labels | grep redis-multi-namespace
 
-# Check operator logs
-kubectl logs -n redis-enterprise deployment/redis-enterprise-operator --tail=50
+# Check operator logs (should show "watching REDB namespaces: app-development, app-production, app-staging")
+kubectl logs -n redis-enterprise deployment/redis-enterprise-operator --tail=50 | grep -i "watching REDB namespaces"
+```
+
+**Expected output**:
+```
+{"level":"info","ts":"2025-12-28T19:02:47.604Z","logger":"cmd","msg":"watching REDB namespaces: app-development, app-production, app-staging"}
 ```
 
 #### Step 7: Deploy REDBs to Consumer Namespaces
 
+⚠️ **Important**: Ensure database ports don't conflict with existing databases. Check current ports:
 ```bash
-# Deploy production database
+kubectl get redb -A -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,PORT:.spec.databasePort
+```
+
+**Deploy databases**:
+
+```bash
+# Deploy production database (port 12001, replication enabled, 2 shards)
 kubectl apply -f 04-redb-production.yaml
 
-# Deploy staging database
+# Wait for production database to be active
+kubectl wait --for=jsonpath='{.status.status}'=active redb/prod-db -n app-production --timeout=120s
+
+# Deploy staging database (port 12002, replication disabled, 1 shard)
 kubectl apply -f 05-redb-staging.yaml
 
-# Deploy development database
+# Wait for staging database to be active
+kubectl wait --for=jsonpath='{.status.status}'=active redb/staging-db -n app-staging --timeout=120s
+
+# Deploy development database (port 12003, replication disabled, 1 shard)
 kubectl apply -f 06-redb-development.yaml
+
+# Wait for development database to be active
+kubectl wait --for=jsonpath='{.status.status}'=active redb/dev-db -n app-development --timeout=120s
 ```
+
+**Database Configuration Summary**:
+| Database | Namespace | Port | Replication | Shards | Memory |
+|----------|-----------|------|-------------|--------|--------|
+| prod-db | app-production | 12001 | ✅ Enabled | 2 | 2GB |
+| staging-db | app-staging | 12002 | ❌ Disabled | 1 | 1GB |
+| dev-db | app-development | 12003 | ❌ Disabled | 1 | 512MB |
+| **Total** | | | | **4** | **3.5GB** |
 
 #### Step 8: Verify Deployments
 
@@ -261,18 +318,80 @@ kubectl apply -f 06-redb-development.yaml
 # Check REDBs in all namespaces
 kubectl get redb -A
 
-# Check production database
+# Expected output:
+# NAMESPACE         NAME         VERSION   PORT    CLUSTER   SHARDS   STATUS   SPEC STATUS   AGE
+# app-development   dev-db       8.2.1     12003   rec       1        active   Valid         1m
+# app-production    prod-db      8.2.1     12001   rec       2        active   Valid         3m
+# app-staging       staging-db   8.2.1     12002   rec       1        active   Valid         2m
+```
+
+**Verify each database**:
+```bash
+# Production database
 kubectl get redb prod-db -n app-production
 kubectl describe redb prod-db -n app-production
 kubectl get svc prod-db -n app-production
+kubectl get secret redb-prod-db -n app-production
 
-# Check staging database
+# Staging database
 kubectl get redb staging-db -n app-staging
 kubectl describe redb staging-db -n app-staging
+kubectl get svc staging-db -n app-staging
+kubectl get secret redb-staging-db -n app-staging
 
-# Check development database
+# Development database
 kubectl get redb dev-db -n app-development
 kubectl describe redb dev-db -n app-development
+kubectl get svc dev-db -n app-development
+kubectl get secret redb-dev-db -n app-development
+```
+
+#### Step 9: Test Connectivity
+
+**Get database password**:
+```bash
+# Production database password
+PROD_PASSWORD=$(kubectl get secret redb-prod-db -n app-production -o jsonpath='{.data.password}' | base64 -d)
+echo "Production DB Password: $PROD_PASSWORD"
+```
+
+**Test from within cluster** (recommended):
+```bash
+# Test PING
+kubectl run redis-test --rm -it --image=redis:latest --restart=Never -- \
+  redis-cli -h redis-12001.redis-enterprise.svc.cluster.local -p 12001 \
+  --tls --insecure -a "$PROD_PASSWORD" PING
+
+# Expected output: PONG
+
+# Test SET
+kubectl run redis-test --rm -it --image=redis:latest --restart=Never -- \
+  redis-cli -h redis-12001.redis-enterprise.svc.cluster.local -p 12001 \
+  --tls --insecure -a "$PROD_PASSWORD" SET test:multi-ns "production-value"
+
+# Expected output: OK
+
+# Test GET
+kubectl run redis-test --rm -it --image=redis:latest --restart=Never -- \
+  redis-cli -h redis-12001.redis-enterprise.svc.cluster.local -p 12001 \
+  --tls --insecure -a "$PROD_PASSWORD" GET test:multi-ns
+
+# Expected output: "production-value"
+```
+
+**Test other databases**:
+```bash
+# Staging database (port 12002)
+STAGING_PASSWORD=$(kubectl get secret redb-staging-db -n app-staging -o jsonpath='{.data.password}' | base64 -d)
+kubectl run redis-test --rm -it --image=redis:latest --restart=Never -- \
+  redis-cli -h redis-12002.redis-enterprise.svc.cluster.local -p 12002 \
+  --tls --insecure -a "$STAGING_PASSWORD" PING
+
+# Development database (port 12003, TLS disabled)
+DEV_PASSWORD=$(kubectl get secret redb-dev-db -n app-development -o jsonpath='{.data.password}' | base64 -d)
+kubectl run redis-test --rm -it --image=redis:latest --restart=Never -- \
+  redis-cli -h redis-12003.redis-enterprise.svc.cluster.local -p 12003 \
+  -a "$DEV_PASSWORD" PING
 ```
 
 ---
@@ -386,7 +505,65 @@ kubectl delete -f 01-operator-rbac.yaml
 
 ## Troubleshooting
 
-### Issue 1: REDB Stuck in Pending State
+### Issue 1: License Shard Limit Exceeded
+
+**Symptoms**:
+```
+Error from server: admission webhook "redisenterprise.admission.redislabs" denied the request:
+Total shards count exceeds amount of total shards permitted by license.
+License permits 4 total shards, but there are 5 total shards in use.
+```
+
+**Cause**: Free/trial license typically allows only 4 shards total. Each REDB with replication uses 2 shards.
+
+**Solution**:
+
+**Option 1: Disable replication on non-production databases**
+```bash
+# Check current shard usage
+kubectl get redb -A -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,SHARDS:.status.shardCount,REPLICATION:.spec.replication
+
+# Delete database
+kubectl delete redb staging-db -n app-staging
+
+# Edit YAML to set replication: false
+# Then reapply
+kubectl apply -f 05-redb-staging.yaml
+```
+
+**Option 2: Delete unused databases**
+```bash
+# Delete test databases from other namespaces
+kubectl delete redb test-db -n redis-enterprise
+```
+
+**Option 3: Upgrade license**
+- Contact Redis for production license with more shards
+
+**Planning Guide**:
+```
+Free License: 4 shards maximum
+
+Configuration A (1 production + 2 non-production):
+  prod-db (replication: true)    = 2 shards
+  staging-db (replication: false) = 1 shard
+  dev-db (replication: false)     = 1 shard
+  Total                           = 4 shards ✅
+
+Configuration B (2 production):
+  prod-db-1 (replication: true)   = 2 shards
+  prod-db-2 (replication: true)   = 2 shards
+  Total                           = 4 shards ✅
+
+Configuration C (4 non-production):
+  db-1 (replication: false)       = 1 shard
+  db-2 (replication: false)       = 1 shard
+  db-3 (replication: false)       = 1 shard
+  db-4 (replication: false)       = 1 shard
+  Total                           = 4 shards ✅
+```
+
+### Issue 2: REDB Stuck in Pending State
 
 **Symptoms**:
 - REDB remains in pending state indefinitely

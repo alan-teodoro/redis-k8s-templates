@@ -4,10 +4,10 @@
 #
 # Characteristics:
 #   - Memory: 1GB (smaller than production)
-#   - Replication: Enabled
+#   - Replication: Disabled (to save shards)
 #   - Persistence: Snapshot every 6 hours
 #   - Eviction: allkeys-lru
-#   - Port: 12000
+#   - Port: 12002
 #
 # Usage:
 #   kubectl apply -f 05-redb-staging.yaml
@@ -26,10 +26,10 @@ spec:
     name: rec
 
   memorySize: 1GB
-  replication: true
+  replication: false  # Disabled to save shards (license limit)
   persistence: snapshotEvery6Hour
   evictionPolicy: allkeys-lru
-  databasePort: 12000
+  databasePort: 12002
   tlsMode: enabled
   resp3: true
   defaultUser: true

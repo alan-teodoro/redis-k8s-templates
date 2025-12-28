@@ -7,7 +7,7 @@
 #   - Replication: Disabled (resource savings)
 #   - Persistence: None (development)
 #   - Eviction: allkeys-lru
-#   - Port: 12000
+#   - Port: 12003
 #
 # Usage:
 #   kubectl apply -f 06-redb-development.yaml
@@ -29,7 +29,7 @@ spec:
   replication: false  # No replication in dev
   persistence: disabled  # No persistence in dev
   evictionPolicy: allkeys-lru
-  databasePort: 12000
+  databasePort: 12003
   tlsMode: disabled  # TLS disabled in dev for easier testing
   resp3: true
   defaultUser: true
