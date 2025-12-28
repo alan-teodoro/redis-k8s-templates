@@ -1,13 +1,13 @@
 # RBAC for Log Collector - Restricted Mode
-# 
-# Este RBAC fornece permissões mínimas para executar o log collector em modo "restricted"
-# (coleta apenas recursos do Redis Enterprise Operator e REC/REDB)
 #
-# Uso:
+# This RBAC provides minimal permissions to run the log collector in "restricted" mode
+# (collects only Redis Enterprise Operator and REC/REDB resources)
+#
+# Usage:
 #   kubectl apply -f 01-rbac-restricted.yaml
 #   kubectl create clusterrolebinding log-collector-binding \
 #     --clusterrole=redis-log-collector-restricted \
-#     --user=<seu-usuario>
+#     --user=<your-username>
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -15,7 +15,7 @@ kind: ClusterRole
 metadata:
   name: redis-log-collector-restricted
 rules:
-  # Permissões para ler pods e logs
+  # Permissions to read pods and logs
   - apiGroups: [""]
     resources:
       - pods
@@ -24,7 +24,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler services
+  # Permissions to read services
   - apiGroups: [""]
     resources:
       - services
@@ -32,7 +32,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler configmaps
+  # Permissions to read configmaps
   - apiGroups: [""]
     resources:
       - configmaps
@@ -40,7 +40,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler secrets (metadata apenas, não valores)
+  # Permissions to read secrets (metadata only, not values)
   - apiGroups: [""]
     resources:
       - secrets
@@ -48,7 +48,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler PVCs
+  # Permissions to read PVCs
   - apiGroups: [""]
     resources:
       - persistentvolumeclaims
@@ -56,7 +56,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler PVs
+  # Permissions to read PVs
   - apiGroups: [""]
     resources:
       - persistentvolumes
@@ -64,7 +64,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler StatefulSets
+  # Permissions to read StatefulSets
   - apiGroups: ["apps"]
     resources:
       - statefulsets
@@ -72,7 +72,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler Deployments
+  # Permissions to read Deployments
   - apiGroups: ["apps"]
     resources:
       - deployments
@@ -80,7 +80,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler ReplicaSets
+  # Permissions to read ReplicaSets
   - apiGroups: ["apps"]
     resources:
       - replicasets
@@ -88,7 +88,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler Custom Resources do Redis Enterprise
+  # Permissions to read Redis Enterprise Custom Resources
   - apiGroups: ["app.redislabs.com"]
     resources:
       - redisenterpriseclusters
@@ -99,7 +99,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler eventos
+  # Permissions to read events
   - apiGroups: [""]
     resources:
       - events
@@ -107,7 +107,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler nodes (necessário para informações de cluster)
+  # Permissions to read nodes (required for cluster information)
   - apiGroups: [""]
     resources:
       - nodes
@@ -115,7 +115,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler namespaces
+  # Permissions to read namespaces
   - apiGroups: [""]
     resources:
       - namespaces
@@ -123,7 +123,7 @@ rules:
       - get
       - list
 
-  # Permissões para ler StorageClasses
+  # Permissions to read StorageClasses
   - apiGroups: ["storage.k8s.io"]
     resources:
       - storageclasses
@@ -132,7 +132,7 @@ rules:
       - list
 
 ---
-# ServiceAccount para o log collector (opcional)
+# ServiceAccount for log collector (optional)
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -140,7 +140,7 @@ metadata:
   namespace: redis-enterprise
 
 ---
-# ClusterRoleBinding para o ServiceAccount
+# ClusterRoleBinding for ServiceAccount
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:

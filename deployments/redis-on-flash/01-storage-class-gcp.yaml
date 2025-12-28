@@ -1,13 +1,13 @@
 # StorageClass for Redis on Flash - GCP Persistent Disk SSD
 #
-# Este StorageClass usa GCP Persistent Disk SSD para Redis on Flash.
+# This StorageClass uses GCP Persistent Disk SSD for Redis on Flash.
 #
-# Características:
+# Features:
 #   - Provisioner: GCP PD CSI Driver
 #   - Type: pd-ssd (SSD Persistent Disk)
 #   - Reclaim Policy: Delete
 #
-# Uso:
+# Usage:
 #   kubectl apply -f 01-storage-class-gcp.yaml
 
 ---
@@ -21,14 +21,14 @@ metadata:
 provisioner: pd.csi.storage.gke.io
 parameters:
   # Type: pd-ssd (SSD Persistent Disk)
-  # Outras opções: pd-standard, pd-balanced, pd-extreme
+  # Other options: pd-standard, pd-balanced, pd-extreme
   type: pd-ssd
-  
+
   # Filesystem type
   fsType: ext4
-  
-  # Replication type: regional-pd para HA
-  # Opções: none (zonal), regional-pd (regional)
+
+  # Replication type: regional-pd for HA
+  # Options: none (zonal), regional-pd (regional)
   replication-type: none
 
 # Reclaim policy: Delete
@@ -37,11 +37,11 @@ reclaimPolicy: Delete
 # Volume binding mode: WaitForFirstConsumer
 volumeBindingMode: WaitForFirstConsumer
 
-# Permite expansão de volumes
+# Allow volume expansion
 allowVolumeExpansion: true
 
 ---
-# StorageClass alternativo com pd-extreme (para workloads críticos)
+# Alternative StorageClass with pd-extreme (for critical workloads)
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -52,10 +52,10 @@ metadata:
 provisioner: pd.csi.storage.gke.io
 parameters:
   type: pd-extreme
-  
-  # IOPS provisionados (até 120000)
+
+  # Provisioned IOPS (up to 120000)
   provisioned-iops-on-create: "100000"
-  
+
   fsType: ext4
   replication-type: none
 reclaimPolicy: Delete
@@ -63,9 +63,9 @@ volumeBindingMode: WaitForFirstConsumer
 allowVolumeExpansion: true
 
 ---
-# StorageClass para local SSD (máxima performance)
-# Requer nodes com local SSD (n2-standard com --local-ssd-count)
-# ATENÇÃO: Dados são perdidos se node falhar (use com replicação)
+# StorageClass for local SSD (maximum performance)
+# Requires nodes with local SSD (n2-standard with --local-ssd-count)
+# WARNING: Data is lost if node fails (use with replication)
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:

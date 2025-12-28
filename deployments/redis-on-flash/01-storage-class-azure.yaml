@@ -1,13 +1,13 @@
 # StorageClass for Redis on Flash - Azure Premium SSD
 #
-# Este StorageClass usa Azure Premium SSD (managed disks) para Redis on Flash.
+# This StorageClass uses Azure Premium SSD (managed disks) for Redis on Flash.
 #
-# Características:
+# Features:
 #   - Provisioner: Azure Disk CSI Driver
 #   - SKU: Premium_LRS (Premium SSD)
 #   - Reclaim Policy: Delete
 #
-# Uso:
+# Usage:
 #   kubectl apply -f 01-storage-class-azure.yaml
 
 ---
@@ -21,13 +21,13 @@ metadata:
 provisioner: disk.csi.azure.com
 parameters:
   # SKU: Premium_LRS (Premium SSD)
-  # Outras opções: StandardSSD_LRS, UltraSSD_LRS
+  # Other options: StandardSSD_LRS, UltraSSD_LRS
   skuName: Premium_LRS
-  
+
   # Filesystem type
   fsType: ext4
-  
-  # Caching mode: ReadOnly para melhor performance de leitura
+
+  # Caching mode: ReadOnly for better read performance
   cachingMode: ReadOnly
 
 # Reclaim policy: Delete
@@ -36,11 +36,11 @@ reclaimPolicy: Delete
 # Volume binding mode: WaitForFirstConsumer
 volumeBindingMode: WaitForFirstConsumer
 
-# Permite expansão de volumes
+# Allow volume expansion
 allowVolumeExpansion: true
 
 ---
-# StorageClass alternativo com Ultra SSD (para workloads críticos)
+# Alternative StorageClass with Ultra SSD (for critical workloads)
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -51,22 +51,22 @@ metadata:
 provisioner: disk.csi.azure.com
 parameters:
   skuName: UltraSSD_LRS
-  
-  # IOPS provisionados (até 160000)
+
+  # Provisioned IOPS (up to 160000)
   diskIOPSReadWrite: "64000"
-  
-  # Throughput em MB/s (até 4000)
+
+  # Throughput in MB/s (up to 4000)
   diskMBpsReadWrite: "2000"
-  
+
   fsType: ext4
-  cachingMode: None  # Ultra SSD não suporta caching
+  cachingMode: None  # Ultra SSD does not support caching
 reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer
 allowVolumeExpansion: true
 
 ---
-# StorageClass para local NVMe (Lsv2/Lsv3 series - máxima performance)
-# ATENÇÃO: Dados são perdidos se node falhar (use com replicação)
+# StorageClass for local NVMe (Lsv2/Lsv3 series - maximum performance)
+# WARNING: Data is lost if node fails (use with replication)
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:

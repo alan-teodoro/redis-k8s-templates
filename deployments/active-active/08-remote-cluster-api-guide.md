@@ -1,49 +1,49 @@
-# Remote Cluster API (RERC) - Guia Completo
+# Remote Cluster API (RERC) - Complete Guide
 
-Documentação detalhada sobre RedisEnterpriseRemoteCluster (RERC) para Active-Active deployments.
+Detailed documentation about RedisEnterpriseRemoteCluster (RERC) for Active-Active deployments.
 
 ---
 
-## 📋 Índice
+## 📋 Table of Contents
 
-- [Visão Geral](#visão-geral)
-- [Arquitetura](#arquitetura)
-- [Configuração](#configuração)
-- [Casos de Uso](#casos-de-uso)
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Configuration](#configuration)
+- [Use Cases](#use-cases)
 - [Troubleshooting](#troubleshooting)
 
 ---
 
-## 🎯 Visão Geral
+## 🎯 Overview
 
-### O que é RERC?
+### What is RERC?
 
-**RedisEnterpriseRemoteCluster (RERC)** é um Custom Resource Definition (CRD) que define a **conexão entre clusters Redis Enterprise** para Active-Active replication.
+**RedisEnterpriseRemoteCluster (RERC)** is a Custom Resource Definition (CRD) that defines the **connection between Redis Enterprise clusters** for Active-Active replication.
 
-### Por que usar RERC?
+### Why use RERC?
 
-✅ **Active-Active Replication**: Habilita replicação bidirecional entre clusters  
-✅ **Geo-Distribution**: Conecta clusters em diferentes regiões/clouds  
-✅ **Disaster Recovery**: Failover automático entre regiões  
-✅ **Low Latency**: Aplicações leem/escrevem localmente  
-✅ **Conflict Resolution**: CRDT resolve conflitos automaticamente  
+✅ **Active-Active Replication**: Enables bidirectional replication between clusters  
+✅ **Geo-Distribution**: Connects clusters in different regions/clouds  
+✅ **Disaster Recovery**: Automatic failover between regions  
+✅ **Low Latency**: Applications read/write locally  
+✅ **Conflict Resolution**: CRDT resolves conflicts automatically  
 
-### Componentes
+### Components
 
-| Componente | Descrição |
-|------------|-----------|
-| **RERC** | Define conexão com cluster remoto |
-| **REC** | Cluster Redis Enterprise local |
-| **REAADB** | Active-Active database que usa RERC |
-| **Secret** | Credenciais para autenticação entre clusters |
+| Component | Description |
+|-----------|-------------|
+| **RERC** | Defines connection to remote cluster |
+| **REC** | Local Redis Enterprise Cluster |
+| **REAADB** | Active-Active database that uses RERC |
+| **Secret** | Credentials for authentication between clusters |
 
 ---
 
-## 🏗️ Arquitetura
+## 🏗️ Architecture
 
-### Fluxo de Comunicação
+### Communication Flow
 
-```
+\`\`\`
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Cluster A                                │
 ├─────────────────────────────────────────────────────────────────┤
@@ -94,51 +94,51 @@ Documentação detalhada sobre RedisEnterpriseRemoteCluster (RERC) para Active-A
 │  └──────────────────────────────────────────────────────────┘     │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────┘
-```
+\`\`\`
 
-### Endpoints Necessários
+### Required Endpoints
 
-Para Active-Active funcionar, os seguintes endpoints devem ser acessíveis:
+For Active-Active to work, the following endpoints must be accessible:
 
-| Endpoint | Porta | Protocolo | Uso |
-|----------|-------|-----------|-----|
-| **API FQDN** | 9443 | HTTPS | Gerenciamento do cluster |
-| **DB FQDN** | 12000+ | TCP/TLS | Replicação de dados |
+| Endpoint | Port | Protocol | Usage |
+|----------|------|----------|-------|
+| **API FQDN** | 9443 | HTTPS | Cluster management |
+| **DB FQDN** | 12000+ | TCP/TLS | Data replication |
 
 ---
 
-## ⚙️ Configuração
+## ⚙️ Configuration
 
-### 1. Estrutura Básica do RERC
+### 1. Basic RERC Structure
 
-```yaml
+\`\`\`yaml
 apiVersion: app.redislabs.com/v1alpha1
 kind: RedisEnterpriseRemoteCluster
 metadata:
   name: rerc-remote
   namespace: redis-enterprise
 spec:
-  # Nome do REC remoto
+  # Remote REC name
   recName: rec-remote
   
-  # Namespace do REC remoto
+  # Remote REC namespace
   recNamespace: redis-enterprise
   
-  # API endpoint do cluster remoto
+  # Remote cluster API endpoint
   apiFqdnUrl: api-rec-remote.redis.example.com
   
-  # Sufixo para databases do cluster remoto
+  # Database suffix for remote cluster
   dbFqdnSuffix: .db-rec-remote.redis.example.com
   
-  # Secret com credenciais do cluster remoto
+  # Secret with remote cluster credentials
   secretName: redis-enterprise-rerc-remote
-```
+\`\`\`
 
-### 2. Secret para RERC
+### 2. Secret for RERC
 
-O secret deve conter as credenciais de admin do cluster remoto:
+The secret must contain the admin credentials of the remote cluster:
 
-```yaml
+\`\`\`yaml
 apiVersion: v1
 kind: Secret
 metadata:
@@ -148,11 +148,11 @@ type: Opaque
 stringData:
   username: admin@redis.com
   password: RedisAdmin123!
-```
+\`\`\`
 
-### 3. Usando RERC em REAADB
+### 3. Using RERC in REAADB
 
-```yaml
+\`\`\`yaml
 apiVersion: app.redislabs.com/v1alpha1
 kind: RedisEnterpriseActiveActiveDatabase
 metadata:
@@ -160,27 +160,27 @@ metadata:
   namespace: redis-enterprise
 spec:
   participatingClusters:
-    # Cluster local
+    # Local cluster
     - name: rerc-local
     
-    # Cluster remoto (definido via RERC)
+    # Remote cluster (defined via RERC)
     - name: rerc-remote
   
   globalConfigurations:
     memorySize: 2GB
     replication: true
-```
+\`\`\`
 
 ---
 
-## 🎯 Casos de Uso
+## 🎯 Use Cases
 
-### 1. Active-Active entre 2 Regiões
+### 1. Active-Active between 2 Regions
 
-**Cenário**: E-commerce com usuários em US-East e EU-West.
+**Scenario**: E-commerce with users in US-East and EU-West.
 
-**Configuração**:
-```yaml
+**Configuration**:
+\`\`\`yaml
 # Cluster US-East
 ---
 apiVersion: app.redislabs.com/v1alpha1
@@ -203,28 +203,28 @@ spec:
   apiFqdnUrl: api-eu-west.redis.example.com
   dbFqdnSuffix: .db-eu-west.redis.example.com
   secretName: rerc-eu-west-secret
-```
+\`\`\`
 
-### 2. Active-Active entre 3+ Regiões
+### 2. Active-Active between 3+ Regions
 
-**Cenário**: Global application com usuários em US, EU, APAC.
+**Scenario**: Global application with users in US, EU, APAC.
 
-**Configuração**:
-```yaml
-# REAADB com 3 clusters
+**Configuration**:
+\`\`\`yaml
+# REAADB with 3 clusters
 spec:
   participatingClusters:
     - name: rerc-us-east
     - name: rerc-eu-west
     - name: rerc-apac-south
-```
+\`\`\`
 
 ### 3. Hybrid Cloud (AWS + Azure + GCP)
 
-**Cenário**: Multi-cloud deployment para evitar vendor lock-in.
+**Scenario**: Multi-cloud deployment to avoid vendor lock-in.
 
-**Configuração**:
-```yaml
+**Configuration**:
+\`\`\`yaml
 # Cluster AWS
 - name: rerc-aws-us-east-1
   apiFqdnUrl: api-aws.redis.example.com
@@ -236,79 +236,79 @@ spec:
 # Cluster GCP
 - name: rerc-gcp-us-central1
   apiFqdnUrl: api-gcp.redis.example.com
-```
+\`\`\`
 
 ---
 
 ## 🔍 Troubleshooting
 
-### 1. RERC não conecta ao cluster remoto
+### 1. RERC cannot connect to remote cluster
 
-**Sintoma**:
-```bash
+**Symptom**:
+\`\`\`bash
 kubectl describe rerc rerc-b -n redis-enterprise
 # Status: Error
 # Message: Failed to connect to remote cluster
-```
+\`\`\`
 
-**Verificar**:
-```bash
-# Testar conectividade ao API endpoint
+**Check**:
+\`\`\`bash
+# Test connectivity to API endpoint
 curl -k https://api-rec-b.redis.example.com:9443/v1/cluster
 
-# Verificar secret
+# Verify secret
 kubectl get secret redis-enterprise-rerc-b -n redis-enterprise -o yaml
-```
+\`\`\`
 
-**Soluções**:
-- Verificar firewall/security groups (porta 9443)
-- Verificar DNS resolution do FQDN
-- Verificar credenciais no secret
+**Solutions**:
+- Check firewall/security groups (port 9443)
+- Verify DNS resolution of FQDN
+- Verify credentials in secret
 
-### 2. Replicação não funciona
+### 2. Replication not working
 
-**Sintoma**: Dados escritos em Cluster A não aparecem em Cluster B.
+**Symptom**: Data written in Cluster A does not appear in Cluster B.
 
-**Verificar**:
-```bash
-# Status do REAADB
+**Check**:
+\`\`\`bash
+# REAADB status
 kubectl describe reaadb aadb -n redis-enterprise
 
-# Logs do operator
+# Operator logs
 kubectl logs -n redis-enterprise deployment/redis-enterprise-operator --tail=100
-```
+\`\`\`
 
-**Soluções**:
-- Verificar conectividade na porta do database (12000+)
-- Verificar `dbFqdnSuffix` está correto
-- Verificar firewall permite tráfego entre clusters
+**Solutions**:
+- Check connectivity on database port (12000+)
+- Verify \`dbFqdnSuffix\` is correct
+- Verify firewall allows traffic between clusters
 
-### 3. REAADB fica em "Pending"
+### 3. REAADB stuck in "Pending"
 
-**Sintoma**:
-```bash
+**Symptom**:
+\`\`\`bash
 kubectl get reaadb -n redis-enterprise
 # NAME   STATUS    AGE
 # aadb   Pending   5m
-```
+\`\`\`
 
-**Verificar**:
-```bash
-# Verificar se todos os RERC estão prontos
+**Check**:
+\`\`\`bash
+# Verify all RERC are ready
 kubectl get rerc -n redis-enterprise
 
-# Verificar eventos
+# Check events
 kubectl describe reaadb aadb -n redis-enterprise
-```
+\`\`\`
 
-**Soluções**:
-- Garantir que todos os RERC estão em estado "Active"
-- Verificar que REC tem recursos suficientes
-- Verificar logs do operator
+**Solutions**:
+- Ensure all RERC are in "Active" state
+- Verify REC has sufficient resources
+- Check operator logs
 
 ---
 
-## 📚 Referências
+## 📚 References
 
 - [Active-Active Documentation](https://redis.io/docs/latest/operate/rs/databases/active-active/)
 - [RERC API Reference](https://redis.io/docs/latest/operate/kubernetes/reference/yaml/redis-enterprise-remote-cluster/)
