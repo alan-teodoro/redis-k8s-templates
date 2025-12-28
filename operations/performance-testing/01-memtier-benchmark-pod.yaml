@@ -1,0 +1,59 @@
+# ============================================================================
+# memtier_benchmark Pod - Interactive Performance Testing
+# ============================================================================
+#
+# Use this pod to run interactive performance tests against Redis databases.
+# This is useful for ad-hoc testing and benchmarking.
+#
+# Usage:
+#   kubectl apply -f 01-memtier-benchmark-pod.yaml
+#   kubectl exec -it memtier-benchmark -n redis-enterprise -- bash
+#   
+#   # Inside the pod:
+#   memtier_benchmark -s redis-db.redis-enterprise.svc.cluster.local -p 12000 \
+#     --protocol=redis --clients=50 --threads=4 --requests=10000
+#
+# ============================================================================
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: memtier-benchmark
+  namespace: redis-enterprise
+  labels:
+    app: memtier-benchmark
+    component: performance-testing
+spec:
+  containers:
+  - name: memtier
+    image: redislabs/memtier_benchmark:latest
+    imagePullPolicy: IfNotPresent
+    
+    # Keep pod running for interactive use
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "memtier_benchmark pod ready!"
+        echo "Run: memtier_benchmark -s <host> -p <port> --protocol=redis ..."
+        sleep infinity
+    
+    # Resource limits
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+    
+    # Environment variables (optional - for convenience)
+    env:
+    - name: REDIS_HOST
+      value: "redis-db.redis-enterprise.svc.cluster.local"
+    - name: REDIS_PORT
+      value: "12000"
+  
+  # Restart policy
+  restartPolicy: Always
+

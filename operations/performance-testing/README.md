@@ -5,11 +5,22 @@ Comprehensive guide for performance testing and benchmarking Redis Enterprise de
 ## 📋 Table of Contents
 
 - [Overview](#overview)
+- [Files in this Directory](#files-in-this-directory)
 - [Testing Tools](#testing-tools)
 - [Benchmarking](#benchmarking)
 - [Load Testing](#load-testing)
 - [Performance Tuning](#performance-tuning)
 - [Metrics to Monitor](#metrics-to-monitor)
+
+---
+
+## 📁 Files in this Directory
+
+| File | Description |
+|------|-------------|
+| `01-memtier-benchmark-pod.yaml` | Interactive memtier_benchmark pod |
+| `02-memtier-benchmark-job.yaml` | Automated memtier_benchmark job |
+| `03-redis-benchmark-pod.yaml` | Interactive redis-benchmark pod |
 
 ---
 
@@ -36,8 +47,11 @@ Performance testing ensures:
 **Best for:** Quick baseline testing
 
 ```bash
-# Install redis-cli with benchmark tool
-kubectl run redis-benchmark --rm -it --image=redis:latest -- bash
+# Deploy redis-benchmark pod
+kubectl apply -f 03-redis-benchmark-pod.yaml
+
+# Exec into pod
+kubectl exec -it redis-benchmark -n redis-enterprise -- bash
 
 # Inside the pod:
 redis-benchmark -h redis-db.redis-enterprise.svc.cluster.local -p 12000 \
@@ -54,10 +68,16 @@ redis-benchmark -h redis-db.redis-enterprise.svc.cluster.local -p 12000 \
 
 **Best for:** Comprehensive testing with realistic workloads
 
+**Option A: Interactive Pod**
 ```bash
-# Run memtier_benchmark
-kubectl run memtier --rm -it --image=redislabs/memtier_benchmark:latest -- \
-  memtier_benchmark \
+# Deploy memtier_benchmark pod
+kubectl apply -f 01-memtier-benchmark-pod.yaml
+
+# Exec into pod
+kubectl exec -it memtier-benchmark -n redis-enterprise -- bash
+
+# Inside the pod:
+memtier_benchmark \
   -s redis-db.redis-enterprise.svc.cluster.local \
   -p 12000 \
   --protocol=redis \
@@ -67,6 +87,18 @@ kubectl run memtier --rm -it --image=redislabs/memtier_benchmark:latest -- \
   --data-size=1024 \
   --key-pattern=R:R \
   --ratio=1:1
+```
+
+**Option B: Automated Job**
+```bash
+# Deploy and run automated test
+kubectl apply -f 02-memtier-benchmark-job.yaml
+
+# Watch logs
+kubectl logs -f job/memtier-benchmark-job -n redis-enterprise
+
+# Clean up
+kubectl delete job memtier-benchmark-job -n redis-enterprise
 ```
 
 **Parameters:**

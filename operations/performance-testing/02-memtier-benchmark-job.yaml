@@ -1,0 +1,144 @@
+# ============================================================================
+# memtier_benchmark Job - Automated Performance Testing
+# ============================================================================
+#
+# Use this Job to run automated performance tests with predefined parameters.
+# Results are saved to pod logs.
+#
+# Usage:
+#   kubectl apply -f 02-memtier-benchmark-job.yaml
+#   kubectl logs -f job/memtier-benchmark-job -n redis-enterprise
+#
+# Customize the test by editing the command section below.
+# ============================================================================
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: memtier-benchmark-job
+  namespace: redis-enterprise
+  labels:
+    app: memtier-benchmark
+    component: performance-testing
+    test-type: baseline
+spec:
+  # Number of times to retry if job fails
+  backoffLimit: 3
+  
+  # Clean up completed jobs after 1 hour
+  ttlSecondsAfterFinished: 3600
+  
+  template:
+    metadata:
+      labels:
+        app: memtier-benchmark
+        component: performance-testing
+    spec:
+      # Do not restart on failure
+      restartPolicy: Never
+      
+      containers:
+      - name: memtier
+        image: redislabs/memtier_benchmark:latest
+        imagePullPolicy: IfNotPresent
+        
+        # Test configuration
+        command:
+          - /bin/sh
+          - -c
+          - |
+            echo "=========================================="
+            echo "memtier_benchmark - Baseline Test"
+            echo "=========================================="
+            echo "Target: ${REDIS_HOST}:${REDIS_PORT}"
+            echo "Clients: 50"
+            echo "Threads: 4"
+            echo "Requests: 100000"
+            echo "Data size: 1KB"
+            echo "Ratio: 1:1 (50% GET, 50% SET)"
+            echo "=========================================="
+            echo ""
+            
+            memtier_benchmark \
+              -s ${REDIS_HOST} \
+              -p ${REDIS_PORT} \
+              --protocol=redis \
+              --clients=50 \
+              --threads=4 \
+              --requests=100000 \
+              --data-size=1024 \
+              --key-pattern=R:R \
+              --ratio=1:1 \
+              --print-percentiles=50,95,99,99.9 \
+              --run-count=3
+            
+            echo ""
+            echo "=========================================="
+            echo "Test completed!"
+            echo "=========================================="
+        
+        # Environment variables
+        env:
+        - name: REDIS_HOST
+          value: "redis-db.redis-enterprise.svc.cluster.local"
+        - name: REDIS_PORT
+          value: "12000"
+        
+        # Optional: Use password from secret
+        # - name: REDIS_PASSWORD
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: redb-redis-db
+        #       key: password
+        
+        # Resource limits
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+
+---
+# ============================================================================
+# Alternative: Read-Heavy Workload Job
+# ============================================================================
+# Uncomment to run read-heavy workload (95% reads, 5% writes)
+
+# apiVersion: batch/v1
+# kind: Job
+# metadata:
+#   name: memtier-benchmark-read-heavy
+#   namespace: redis-enterprise
+# spec:
+#   backoffLimit: 3
+#   ttlSecondsAfterFinished: 3600
+#   template:
+#     spec:
+#       restartPolicy: Never
+#       containers:
+#       - name: memtier
+#         image: redislabs/memtier_benchmark:latest
+#         command:
+#           - memtier_benchmark
+#           - -s
+#           - redis-db.redis-enterprise.svc.cluster.local
+#           - -p
+#           - "12000"
+#           - --protocol=redis
+#           - --clients=100
+#           - --threads=8
+#           - --requests=100000
+#           - --data-size=1024
+#           - --key-pattern=R:R
+#           - --ratio=19:1
+#           - --print-percentiles=50,95,99,99.9
+#         resources:
+#           requests:
+#             cpu: 1000m
+#             memory: 1Gi
+#           limits:
+#             cpu: 4000m
+#             memory: 4Gi
+

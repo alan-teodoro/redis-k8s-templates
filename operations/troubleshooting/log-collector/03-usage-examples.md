@@ -1,310 +1,254 @@
-# Exemplos de Uso do Log Collector
+# Log Collector Usage Examples
 
-Este documento contém exemplos práticos de uso do log collector em diferentes cenários.
-
----
-
-## 📋 Índice
-
-- [Cenários Básicos](#cenários-básicos)
-- [Cenários Avançados](#cenários-avançados)
-- [Cenários de Produção](#cenários-de-produção)
-- [Troubleshooting Específico](#troubleshooting-específico)
+This document contains practical examples of using the log collector in different scenarios.
 
 ---
 
-## 🎯 Cenários Básicos
+## 📋 Table of Contents
 
-### 1. Coleta Simples (Namespace Atual)
+- [Basic Scenarios](#basic-scenarios)
+- [Advanced Scenarios](#advanced-scenarios)
+- [Production Scenarios](#production-scenarios)
+- [Specific Troubleshooting](#specific-troubleshooting)
+
+---
+
+## 🎯 Basic Scenarios
+
+### 1. Simple Collection (Current Namespace)
 
 ```bash
-# Download do script
+# Download the script
 curl -LO https://raw.githubusercontent.com/RedisLabs/redis-enterprise-k8s-docs/master/log_collector/log_collector.py
 
-# Executar (usa namespace do contexto kubectl atual)
+# Run (uses current kubectl context namespace)
 python3 log_collector.py
 
-# Resultado
-# Arquivo: redis_enterprise_k8s_debug_info_<timestamp>.tar.gz
+# Result
+# File: redis_enterprise_k8s_debug_info_<timestamp>.tar.gz
 ```
 
-### 2. Coleta de Namespace Específico
+### 2. Collection from Specific Namespace
 
 ```bash
-# Coletar do namespace redis-enterprise
+# Collect from redis-enterprise namespace
 python3 log_collector.py -n redis-enterprise
 
-# Coletar de múltiplos namespaces
+# Collect from multiple namespaces
 python3 log_collector.py -n redis-enterprise,redis-prod,redis-dev
 ```
 
-### 3. Coleta com Saída Customizada
+### 3. Collection with Custom Output
 
 ```bash
-# Especificar diretório de saída
+# Specify output directory
 python3 log_collector.py -n redis-enterprise -o /tmp/redis-logs
 
-# Verificar arquivo gerado
+# Check generated file
 ls -lh /tmp/redis-logs/redis_enterprise_k8s_debug_info_*.tar.gz
 ```
 
 ---
 
-## 🔧 Cenários Avançados
+## 🔧 Advanced Scenarios
 
-### 4. Coleta Completa (Modo All)
+### 4. Complete Collection (All Mode)
 
 ```bash
-# Coletar TODOS os recursos do namespace
+# Collect ALL resources from namespace
 python3 log_collector.py -n redis-enterprise --mode all
 
-# ⚠️ Mais lento, mas mais completo
-# Útil quando o problema não está claro
+# ⚠️ Slower, but more complete
+# Useful when the problem is not clear
 ```
 
-### 5. Coleta com Istio
+### 5. Collection with Istio
 
 ```bash
-# Coletar informações do Istio junto com Redis
+# Collect Istio information
 python3 log_collector.py -n redis-enterprise --collect_istio
 
-# Útil quando usar Istio Service Mesh
+# Includes:
+# - Istio sidecar logs
+# - Envoy configuration
+# - Virtual services
+# - Destination rules
 ```
 
-### 6. Coleta por Helm Release
+### 6. Collection by Helm Release
 
 ```bash
-# Coletar apenas recursos de um Helm release específico
+# Collect by Helm release name
 python3 log_collector.py --helm_release_name redis-enterprise
 
-# Útil em ambientes com múltiplas instalações
+# Automatically detects namespace from Helm release
 ```
 
-### 7. Coleta com Timeout Customizado
+### 7. Collection with Extended Timeout
 
 ```bash
-# Aumentar timeout para ambientes grandes (padrão: 180s)
-python3 log_collector.py -n redis-enterprise -t 300
+# Increase timeout for large clusters
+python3 log_collector.py -n redis-enterprise -t 600
 
-# Desabilitar timeout (não recomendado)
+# Disable timeout (wait indefinitely)
 python3 log_collector.py -n redis-enterprise -t 0
 ```
 
 ---
 
-## 🏭 Cenários de Produção
+## 🏭 Production Scenarios
 
-### 8. Coleta Multi-Namespace (Produção)
+### 8. Multi-Namespace Production Environment
 
 ```bash
-# Coletar de todos os namespaces de produção
+# Collect from all production namespaces
 python3 log_collector.py \
-  -n redis-prod-us-east,redis-prod-us-west,redis-prod-eu \
+  -n redis-prod-us,redis-prod-eu,redis-prod-asia \
   -o /var/log/redis-support \
   -t 300
 
-# Compactar ainda mais (opcional)
-cd /var/log/redis-support
-gzip redis_enterprise_k8s_debug_info_*.tar.gz
+# Result: Single tar.gz with all namespaces
 ```
 
-### 9. Coleta Agendada (Cron)
+### 9. Complete Diagnostic for Support Ticket
 
 ```bash
-# Criar script de coleta agendada
-cat > /usr/local/bin/redis-log-collect.sh << 'EOF'
-#!/bin/bash
-DATE=$(date +%Y%m%d)
-OUTPUT_DIR="/var/log/redis-collector/${DATE}"
-mkdir -p "${OUTPUT_DIR}"
-
-python3 /opt/log_collector.py \
+# Complete collection for support
+python3 log_collector.py \
   -n redis-enterprise \
-  -o "${OUTPUT_DIR}" \
-  -t 300
+  --mode all \
+  -a \
+  --collect_istio \
+  -o /tmp/redis-support-ticket-12345
 
-# Manter apenas últimos 7 dias
-find /var/log/redis-collector -type d -mtime +7 -exec rm -rf {} \;
-EOF
-
-chmod +x /usr/local/bin/redis-log-collect.sh
-
-# Adicionar ao cron (diariamente às 2am)
-echo "0 2 * * * /usr/local/bin/redis-log-collect.sh" | crontab -
+# Upload to Redis support:
+# File: /tmp/redis-support-ticket-12345/redis_enterprise_k8s_debug_info_*.tar.gz
 ```
 
-### 10. Coleta com ServiceAccount
+### 10. Scheduled Collection (Cron)
 
 ```bash
-# Aplicar RBAC
-kubectl apply -f 01-rbac-restricted.yaml
+# Add to crontab for daily collection
+# Run every day at 2 AM
+0 2 * * * /usr/bin/python3 /opt/scripts/log_collector.py -n redis-enterprise -o /var/log/redis-daily
 
-# Criar pod para executar log collector
-kubectl run redis-log-collector \
-  --image=python:3.11-slim \
-  --serviceaccount=redis-log-collector \
-  --restart=Never \
-  --rm -it \
-  --namespace=redis-enterprise \
-  -- bash -c "
-    pip install pyyaml && \
-    curl -LO https://raw.githubusercontent.com/RedisLabs/redis-enterprise-k8s-docs/master/log_collector/log_collector.py && \
-    python3 log_collector.py -n redis-enterprise
-  "
+# Keep last 7 days
+0 3 * * * find /var/log/redis-daily -name "*.tar.gz" -mtime +7 -delete
 ```
 
 ---
 
-## 🔍 Troubleshooting Específico
+## 🔍 Specific Troubleshooting
 
-### 11. Problema com Operator
+### 11. Operator Not Starting
 
 ```bash
-# Coletar logs focados no operator
-python3 log_collector.py \
-  -n redis-enterprise \
-  --mode restricted \
-  -o /tmp/operator-issue
+# Collect operator logs
+python3 log_collector.py -n redis-enterprise
 
-# Extrair e verificar logs do operator
+# Extract and check operator logs
 cd /tmp/operator-issue
 tar -xzf redis_enterprise_k8s_debug_info_*.tar.gz
 cat */pods/redis-enterprise-operator-*/logs.txt
 ```
 
-### 12. Problema com Database Específico
+### 12. Specific Database Issue
 
 ```bash
-# Coletar logs de namespace específico
+# Collect logs from specific namespace
 python3 log_collector.py -n redis-enterprise
 
-# Extrair e buscar por database específico
+# Extract and search for specific database
 tar -xzf redis_enterprise_k8s_debug_info_*.tar.gz
 grep -r "redis-db-prod" */
 ```
 
-### 13. Problema de Performance
+### 13. Performance Issue
 
 ```bash
-# Coletar com modo all para análise completa
+# Collect with all mode for complete analysis
 python3 log_collector.py \
   -n redis-enterprise \
   --mode all \
   -a \
   -t 600
 
-# -a: logs de todos os pods
-# -t 600: timeout de 10 minutos
+# Analyze resource usage in extracted files
 ```
 
-### 14. Problema de Rede/Istio
+### 14. Network Connectivity Issue
 
 ```bash
-# Coletar com informações de Istio
+# Collect with Istio information
 python3 log_collector.py \
   -n redis-enterprise \
-  --collect_istio \
-  --mode all
+  --collect_istio
 
-# Útil para problemas de conectividade
+# Check network policies and services
+tar -xzf redis_enterprise_k8s_debug_info_*.tar.gz
+cat */services/*.yaml
+cat */networkpolicies/*.yaml
+```
+
+### 15. Upgrade Failure
+
+```bash
+# Collect before and after upgrade
+# Before:
+python3 log_collector.py -n redis-enterprise -o /tmp/before-upgrade
+
+# After upgrade (if failed):
+python3 log_collector.py -n redis-enterprise -o /tmp/after-upgrade
+
+# Compare both files
 ```
 
 ---
 
-## 📤 Envio ao Suporte
+## 📊 Analyzing Collected Data
 
-### Preparar Arquivo para Envio
-
-```bash
-# 1. Localizar arquivo
-ls -lh redis_enterprise_k8s_debug_info_*.tar.gz
-
-# 2. Verificar tamanho
-du -h redis_enterprise_k8s_debug_info_*.tar.gz
-
-# 3. Se muito grande, compactar mais
-gzip redis_enterprise_k8s_debug_info_*.tar.gz
-# Resultado: redis_enterprise_k8s_debug_info_*.tar.gz.gz
-
-# 4. Upload para suporte (exemplo com curl)
-curl -F "file=@redis_enterprise_k8s_debug_info_*.tar.gz" \
-     -F "ticket=TICKET-12345" \
-     https://support.redis.com/upload
-```
-
----
-
-## 🔐 Uso com RBAC
-
-### Verificar Permissões
+### Extract and Navigate
 
 ```bash
-# Verificar se você tem permissões necessárias
-kubectl auth can-i get pods -n redis-enterprise
-kubectl auth can-i get logs -n redis-enterprise
-kubectl auth can-i list redisenterpriseclusters -n redis-enterprise
-
-# Se não tiver, aplicar RBAC
-kubectl apply -f 01-rbac-restricted.yaml
-
-# Criar binding para seu usuário
-kubectl create clusterrolebinding my-log-collector \
-  --clusterrole=redis-log-collector-restricted \
-  --user=$(kubectl config view -o jsonpath='{.users[0].name}')
-```
-
----
-
-## 📊 Análise do Arquivo Coletado
-
-### Estrutura do Arquivo
-
-```bash
-# Extrair arquivo
+# Extract tar.gz
 tar -xzf redis_enterprise_k8s_debug_info_20231215_143022.tar.gz
 
-# Estrutura típica:
-redis_enterprise_k8s_debug_info_20231215_143022/
-├── cluster_info/
-│   ├── nodes.yaml
-│   ├── storageclasses.yaml
-│   └── namespaces.yaml
-├── pods/
-│   ├── redis-enterprise-operator-xxx/
-│   │   ├── describe.yaml
-│   │   └── logs.txt
-│   └── rec-redis-enterprise-0/
-│       ├── describe.yaml
-│       └── logs.txt
-├── services/
-├── configmaps/
-├── secrets/
-├── custom_resources/
-│   ├── redisenterpriseclusters.yaml
-│   └── redisenterprisedatabases.yaml
-└── events.yaml
+# Navigate to directory
+cd redis_enterprise_k8s_debug_info_20231215_143022/
+
+# Directory structure:
+# cluster_info/    - Cluster-level information
+# pods/            - Pod describes and logs
+# services/        - Services
+# configmaps/      - ConfigMaps
+# secrets/         - Secrets (metadata only)
+# custom_resources/- REC, REDB, RERC, REAADB
+# events.yaml      - Kubernetes events
 ```
 
-### Comandos Úteis de Análise
+### Useful Analysis Commands
 
 ```bash
-# Buscar erros nos logs
+# Search for errors in logs
 grep -r "ERROR\|FATAL\|CRITICAL" */
 
-# Buscar warnings
+# Search for warnings
 grep -r "WARN" */
 
-# Verificar eventos
+# Check events
 cat */events.yaml | grep -A 5 "Warning"
 
-# Verificar status do REC
+# Check REC status
 cat */custom_resources/redisenterpriseclusters.yaml | grep -A 20 "status:"
+
+# Check REDB status
+cat */custom_resources/redisenterprisedatabases.yaml | grep -A 20 "status:"
 ```
 
 ---
 
-## 🔗 Referências
+## 🔗 References
 
-- [Documentação Oficial - Collect Logs](https://redis.io/docs/latest/operate/kubernetes/logs/collect-logs/)
+- [Official Documentation - Collect Logs](https://redis.io/docs/latest/operate/kubernetes/logs/collect-logs/)
 - [Redis Enterprise K8s Docs](https://github.com/RedisLabs/redis-enterprise-k8s-docs)
 

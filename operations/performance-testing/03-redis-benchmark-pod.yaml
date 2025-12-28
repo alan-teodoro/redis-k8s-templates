@@ -1,0 +1,59 @@
+# ============================================================================
+# redis-benchmark Pod - Built-in Redis Benchmark Tool
+# ============================================================================
+#
+# Use this pod to run redis-benchmark (built-in Redis tool) for quick tests.
+# Simpler than memtier_benchmark but less flexible.
+#
+# Usage:
+#   kubectl apply -f 03-redis-benchmark-pod.yaml
+#   kubectl exec -it redis-benchmark -n redis-enterprise -- bash
+#   
+#   # Inside the pod:
+#   redis-benchmark -h redis-db.redis-enterprise.svc.cluster.local -p 12000 \
+#     -c 50 -n 100000 -d 1024 -t get,set
+#
+# ============================================================================
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: redis-benchmark
+  namespace: redis-enterprise
+  labels:
+    app: redis-benchmark
+    component: performance-testing
+spec:
+  containers:
+  - name: redis
+    image: redis:latest
+    imagePullPolicy: IfNotPresent
+    
+    # Keep pod running for interactive use
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "redis-benchmark pod ready!"
+        echo "Run: redis-benchmark -h <host> -p <port> -c 50 -n 100000 -t get,set"
+        sleep infinity
+    
+    # Resource limits
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+    
+    # Environment variables (optional - for convenience)
+    env:
+    - name: REDIS_HOST
+      value: "redis-db.redis-enterprise.svc.cluster.local"
+    - name: REDIS_PORT
+      value: "12000"
+  
+  # Restart policy
+  restartPolicy: Always
+
