@@ -1,20 +1,20 @@
 # Consumer Namespaces for Multi-Namespace REDB Deployment
 #
-# Este arquivo cria os namespaces "consumer" onde os REDBs serão criados.
+# This file creates the "consumer" namespaces where REDBs will be created.
 #
-# Estrutura:
-#   - app-production: Databases de produção
-#   - app-staging: Databases de staging/homologação
-#   - app-development: Databases de desenvolvimento
+# Structure:
+#   - app-production: Production databases
+#   - app-staging: Staging/QA databases
+#   - app-development: Development databases
 #
-# Uso:
+# Usage:
 #   kubectl apply -f 02-consumer-namespaces.yaml
 #
-# Verificar:
+# Verify:
 #   kubectl get namespaces | grep app-
 
 ---
-# Namespace para databases de PRODUÇÃO
+# Namespace for PRODUCTION databases
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -25,7 +25,7 @@ metadata:
     redis-enterprise-consumer: "true"
 
 ---
-# Namespace para databases de STAGING
+# Namespace for STAGING databases
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -36,7 +36,7 @@ metadata:
     redis-enterprise-consumer: "true"
 
 ---
-# Namespace para databases de DEVELOPMENT
+# Namespace for DEVELOPMENT databases
 apiVersion: v1
 kind: Namespace
 metadata:

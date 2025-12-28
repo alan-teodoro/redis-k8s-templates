@@ -1,44 +1,94 @@
 # Multi-Namespace REDB Deployment
 
-Deploy Redis Enterprise databases (REDB) across multiple Kubernetes namespaces for better resource isolation and organization.
+⚠️ **IMPORTANT LIMITATION - NOT SUPPORTED**
 
-## 📋 Índice
+**This deployment pattern is NOT currently supported by the Redis Enterprise Operator.**
 
-- [Visão Geral](#visão-geral)
-- [Arquitetura](#arquitetura)
-- [Pré-requisitos](#pré-requisitos)
-- [Guia de Deployment](#guia-de-deployment)
-- [Casos de Uso](#casos-de-uso)
+The Redis Enterprise Operator (as of version 8.0.6-8, December 2025) **does not support managing REDBs across multiple namespaces**. The operator can only watch and manage resources in a single namespace (configured via `WATCH_NAMESPACE` environment variable).
+
+**Attempting to deploy REDBs in namespaces other than the operator's namespace will result in:**
+- REDBs remaining in pending state indefinitely
+- No events or status updates on REDB resources
+- Operator crashes if `WATCH_NAMESPACE` is set to empty string
+
+---
+
+## Alternative Approaches
+
+If you need namespace isolation for Redis databases, consider these alternatives:
+
+### Option 1: Multiple Operator Instances (Recommended)
+Deploy a separate Redis Enterprise Operator and REC in each namespace that needs Redis databases.
+
+**Pros:**
+- Full isolation between namespaces
+- Each namespace has its own operator and cluster
+- Supported configuration
+
+**Cons:**
+- Higher resource usage (multiple operators and RECs)
+- More complex management
+
+### Option 2: Use Labels and RBAC
+Deploy all REDBs in the same namespace (`redis-enterprise`) but use:
+- Kubernetes labels to organize databases by team/environment
+- RBAC to control access to specific REDB resources
+- Naming conventions (e.g., `team-a-prod-db`, `team-b-staging-db`)
+
+**Pros:**
+- Single operator and REC
+- Lower resource usage
+- Simpler management
+
+**Cons:**
+- No namespace-level isolation
+- All databases in same namespace
+
+---
+
+## Historical Context (For Reference Only)
+
+The content below describes the **intended** multi-namespace deployment pattern, which is **NOT currently functional** with Redis Enterprise Operator. This documentation is preserved for reference in case future operator versions add this capability.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [Deployment Guide](#deployment-guide)
+- [Use Cases](#use-cases)
 - [Troubleshooting](#troubleshooting)
 
 ---
 
-## 🎯 Visão Geral
+## Overview
 
-### O que é Multi-Namespace REDB?
+### What is Multi-Namespace REDB?
 
-**Multi-namespace deployment** permite que um único **Redis Enterprise Operator** gerencie clusters (REC) e databases (REDB) em **diferentes namespaces**, proporcionando:
+**Multi-namespace deployment** allows a single **Redis Enterprise Operator** to manage clusters (REC) and databases (REDB) across **different namespaces**, providing:
 
-✅ **Isolamento de Namespace**: Separar recursos Redis por time, ambiente ou aplicação  
-✅ **Gerenciamento Centralizado**: Um único operator gerencia múltiplos namespaces  
-✅ **Compartilhamento de Recursos**: Uso eficiente de recursos do cluster  
-✅ **RBAC Flexível**: Permissões granulares por namespace  
+✅ **Namespace Isolation**: Separate Redis resources by team, environment, or application  
+✅ **Centralized Management**: Single operator manages multiple namespaces  
+✅ **Resource Sharing**: Efficient use of cluster resources  
+✅ **Flexible RBAC**: Granular permissions per namespace  
 
-### Benefícios
+### Benefits
 
-| Benefício | Descrição |
-|-----------|-----------|
-| **Isolamento** | Cada time/app tem seu próprio namespace com REDBs isolados |
-| **Segurança** | RBAC por namespace, limitando acesso entre times |
-| **Organização** | Separação clara entre ambientes (prod, staging, dev) |
-| **Eficiência** | Um único REC pode servir múltiplos namespaces |
-| **Escalabilidade** | Adicionar novos namespaces sem novos operators |
+| Benefit | Description |
+|---------|-------------|
+| **Isolation** | Each team/app has its own namespace with isolated REDBs |
+| **Security** | RBAC per namespace, limiting access between teams |
+| **Organization** | Clear separation between environments (prod, staging, dev) |
+| **Efficiency** | Single REC can serve multiple namespaces |
+| **Scalability** | Add new namespaces without new operators |
 
 ---
 
-## 🏗️ Arquitetura
+## Architecture
 
-### Estrutura de Namespaces
+### Namespace Structure
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -50,7 +100,7 @@ Deploy Redis Enterprise databases (REDB) across multiple Kubernetes namespaces f
 │  ├──────────────────────────────────────────────────────┤   │
 │  │  - Redis Enterprise Operator                         │   │
 │  │  - RedisEnterpriseCluster (REC)                      │   │
-│  │  - REC Pods (rec-redis-enterprise-0, 1, 2)           │   │
+│  │  - REC Pods (rec-0, rec-1, rec-2)                    │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                           │                                   │
 │                           │ Manages                           │
@@ -58,8 +108,7 @@ Deploy Redis Enterprise databases (REDB) across multiple Kubernetes namespaces f
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │  Namespace: app-production (Consumer Namespace)      │   │
 │  ├──────────────────────────────────────────────────────┤   │
-│  │  - RedisEnterpriseDatabase (REDB) - prod-db-1        │   │
-│  │  - RedisEnterpriseDatabase (REDB) - prod-db-2        │   │
+│  │  - RedisEnterpriseDatabase (REDB) - prod-db          │   │
 │  │  - Services (database endpoints)                     │   │
 │  │  - Secrets (database credentials)                    │   │
 │  └──────────────────────────────────────────────────────┘   │
@@ -67,7 +116,7 @@ Deploy Redis Enterprise databases (REDB) across multiple Kubernetes namespaces f
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │  Namespace: app-staging (Consumer Namespace)         │   │
 │  ├──────────────────────────────────────────────────────┤   │
-│  │  - RedisEnterpriseDatabase (REDB) - staging-db-1     │   │
+│  │  - RedisEnterpriseDatabase (REDB) - staging-db       │   │
 │  │  - Services (database endpoints)                     │   │
 │  │  - Secrets (database credentials)                    │   │
 │  └──────────────────────────────────────────────────────┘   │
@@ -75,7 +124,7 @@ Deploy Redis Enterprise databases (REDB) across multiple Kubernetes namespaces f
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │  Namespace: app-development (Consumer Namespace)     │   │
 │  ├──────────────────────────────────────────────────────┤   │
-│  │  - RedisEnterpriseDatabase (REDB) - dev-db-1         │   │
+│  │  - RedisEnterpriseDatabase (REDB) - dev-db           │   │
 │  │  - Services (database endpoints)                     │   │
 │  │  - Secrets (database credentials)                    │   │
 │  └──────────────────────────────────────────────────────┘   │
@@ -83,7 +132,7 @@ Deploy Redis Enterprise databases (REDB) across multiple Kubernetes namespaces f
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Componentes
+### Components
 
 1. **Operator Namespace** (`redis-enterprise`):
    - Redis Enterprise Operator
@@ -97,9 +146,9 @@ Deploy Redis Enterprise databases (REDB) across multiple Kubernetes namespaces f
 
 ---
 
-## ✅ Pré-requisitos
+## Prerequisites
 
-### 1. Cluster Kubernetes
+### 1. Kubernetes Cluster
 
 ```bash
 kubectl version --short
@@ -107,149 +156,158 @@ kubectl version --short
 # Server Version: v1.28+
 ```
 
-### 2. Redis Enterprise Operator Instalado
+### 2. Redis Enterprise Operator Installed
 
-O operator deve estar instalado no namespace `redis-enterprise`:
+The operator must be installed in the `redis-enterprise` namespace:
 
 ```bash
 kubectl get deployment redis-enterprise-operator -n redis-enterprise
 ```
 
-### 3. RedisEnterpriseCluster (REC) Criado
+### 3. RedisEnterpriseCluster (REC) Created
 
 ```bash
 kubectl get rec -n redis-enterprise
-# NAME                  AGE
-# redis-enterprise      10m
+# NAME   NODES   VERSION    STATE
+# rec    3       8.0.6-54   Running
 ```
 
-### 4. Permissões RBAC
+### 4. RBAC Permissions
 
-Você precisa de permissões para:
-- Criar namespaces
-- Criar ClusterRoles e ClusterRoleBindings
-- Criar Roles e RoleBindings em múltiplos namespaces
+You need permissions to:
+- Create namespaces
+- Create ClusterRoles and ClusterRoleBindings
+- Create Roles and RoleBindings in multiple namespaces
 
 ---
 
-## 📖 Guia de Deployment
+## Deployment Guide
 
-### Passo 1: Configurar RBAC para Multi-Namespace
+### Step 1: Configure RBAC for Multi-Namespace
 
 ```bash
-# Aplicar RBAC para operator gerenciar múltiplos namespaces
+# Apply RBAC for operator to manage multiple namespaces
 kubectl apply -f 01-operator-rbac.yaml
 ```
 
-Este arquivo cria:
-- **ClusterRole**: Permissões para operator listar namespaces
-- **ClusterRoleBinding**: Vincula ClusterRole ao ServiceAccount do operator
+This creates:
+- **ClusterRole**: Permissions for operator to list namespaces
+- **ClusterRoleBinding**: Binds ClusterRole to operator ServiceAccount
 
-### Passo 2: Criar Consumer Namespaces
+### Step 2: Create Consumer Namespaces
 
 ```bash
-# Criar namespaces para databases
+# Create namespaces for production, staging, and development
 kubectl apply -f 02-consumer-namespaces.yaml
 ```
 
-Cria 3 namespaces:
+This creates three namespaces:
 - `app-production`
 - `app-staging`
 - `app-development`
 
-### Passo 3: Configurar RBAC nos Consumer Namespaces
+### Step 3: Configure RBAC for Consumer Namespaces
 
 ```bash
-# Aplicar RBAC em cada consumer namespace
+# Apply RBAC for operator to manage REDBs in consumer namespaces
 kubectl apply -f 03-consumer-rbac.yaml
 ```
 
-Este arquivo cria em **cada consumer namespace**:
-- **Role**: Permissões para gerenciar REDBs, secrets, services
-- **RoleBinding**: Vincula Role aos ServiceAccounts (operator + REC)
+This creates for EACH consumer namespace:
+- **Role**: Permissions to manage REDBs, Services, Secrets
+- **RoleBinding**: Binds Role to operator ServiceAccount
 
-### Passo 4: Criar REDBs nos Consumer Namespaces
+### Step 4: Deploy REDBs to Consumer Namespaces
 
 ```bash
-# Criar databases em cada namespace
+# Deploy production database
 kubectl apply -f 04-redb-production.yaml
+
+# Deploy staging database
 kubectl apply -f 05-redb-staging.yaml
+
+# Deploy development database
 kubectl apply -f 06-redb-development.yaml
 ```
 
-### Passo 5: Verificar Deployment
+### Step 5: Verify Deployments
 
 ```bash
-# Verificar REDBs em todos os namespaces
+# Check REDBs in all namespaces
 kubectl get redb -A
 
-# Verificar status detalhado
-kubectl describe redb prod-db-1 -n app-production
-kubectl describe redb staging-db-1 -n app-staging
-kubectl describe redb dev-db-1 -n app-development
+# Check production database
+kubectl get redb prod-db -n app-production
+kubectl get svc prod-db -n app-production
+
+# Check staging database
+kubectl get redb staging-db -n app-staging
+kubectl get svc staging-db -n app-staging
+
+# Check development database
+kubectl get redb dev-db -n app-development
+kubectl get svc dev-db -n app-development
 ```
 
 ---
 
-## 🎯 Casos de Uso
+## Use Cases
 
-### 1. Isolamento por Time
+### Use Case 1: Multi-Environment Deployment
 
-```
-Namespace: team-backend    → Backend databases
-Namespace: team-frontend   → Frontend databases
-Namespace: team-analytics  → Analytics databases
-```
+Separate production, staging, and development databases in different namespaces:
 
-### 2. Isolamento por Ambiente
+- **Production** (`app-production`): High resources, strict RBAC
+- **Staging** (`app-staging`): Medium resources, testing environment
+- **Development** (`app-development`): Low resources, developer access
 
-```
-Namespace: production  → Production databases
-Namespace: staging     → Staging databases
-Namespace: development → Development databases
-```
+### Use Case 2: Multi-Tenant SaaS
 
-### 3. Isolamento por Aplicação
+Each customer gets their own namespace with isolated databases:
 
-```
-Namespace: app-ecommerce  → E-commerce databases
-Namespace: app-auth       → Authentication databases
-Namespace: app-analytics  → Analytics databases
-```
+- `customer-a` namespace → `customer-a-db` REDB
+- `customer-b` namespace → `customer-b-db` REDB
+- `customer-c` namespace → `customer-c-db` REDB
 
-### 4. Multi-Tenancy
+### Use Case 3: Team-Based Isolation
 
-```
-Namespace: tenant-acme    → ACME Corp databases
-Namespace: tenant-globex  → Globex databases
-Namespace: tenant-initech → Initech databases
-```
+Each team has their own namespace:
+
+- `team-backend` → Backend services databases
+- `team-frontend` → Frontend caching databases
+- `team-analytics` → Analytics databases
 
 ---
 
-## 🔍 Troubleshooting
+## Cleanup
 
-Veja o arquivo [07-troubleshooting.md](./07-troubleshooting.md) para guia completo de troubleshooting.
+```bash
+# Delete REDBs
+kubectl delete -f 04-redb-production.yaml
+kubectl delete -f 05-redb-staging.yaml
+kubectl delete -f 06-redb-development.yaml
+
+# Delete consumer namespaces (this also deletes all resources inside)
+kubectl delete -f 02-consumer-namespaces.yaml
+
+# Delete RBAC
+kubectl delete -f 03-consumer-rbac.yaml
+kubectl delete -f 01-operator-rbac.yaml
+```
+
+**Note**: This does NOT delete the REC or operator in `redis-enterprise` namespace.
 
 ---
 
-## 📚 Arquivos
+## Troubleshooting
 
-| Arquivo | Descrição |
-|---------|-----------|
-| `01-operator-rbac.yaml` | RBAC para operator gerenciar múltiplos namespaces |
-| `02-consumer-namespaces.yaml` | Criação dos consumer namespaces |
-| `03-consumer-rbac.yaml` | RBAC nos consumer namespaces |
-| `04-redb-production.yaml` | REDB para produção |
-| `05-redb-staging.yaml` | REDB para staging |
-| `06-redb-development.yaml` | REDB para desenvolvimento |
-| `07-troubleshooting.md` | Guia de troubleshooting |
+See [07-troubleshooting.md](./07-troubleshooting.md) for common issues and solutions.
 
 ---
 
-## 🔗 Referências
+## References
 
-- [Documentação Oficial - Multi-Namespace](https://redis.io/docs/latest/operate/kubernetes/reference/yaml/multi-namespace/)
-- [Manage Databases in Multiple Namespaces](https://redis.io/docs/latest/operate/kubernetes/7.4.6/re-clusters/multi-namespace/)
-- [RBAC Configuration](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
+- [Redis Enterprise Operator Documentation](https://docs.redis.com/latest/kubernetes/)
+- [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
+- [Kubernetes Namespaces](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/)
 

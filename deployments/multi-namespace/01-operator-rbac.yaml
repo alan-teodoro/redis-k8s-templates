@@ -1,17 +1,17 @@
 # RBAC for Redis Enterprise Operator - Multi-Namespace Support
 #
-# Este arquivo configura as permissões necessárias para o Redis Enterprise Operator
-# gerenciar recursos em múltiplos namespaces.
+# This file configures the necessary permissions for the Redis Enterprise Operator
+# to manage resources across multiple namespaces.
 #
-# Componentes:
-#   1. ClusterRole: Permissões cluster-wide para listar namespaces
-#   2. ClusterRoleBinding: Vincula ClusterRole ao ServiceAccount do operator
+# Components:
+#   1. ClusterRole: Cluster-wide permissions to list namespaces
+#   2. ClusterRoleBinding: Binds ClusterRole to operator ServiceAccount
 #
-# Uso:
+# Usage:
 #   kubectl apply -f 01-operator-rbac.yaml
 
 ---
-# ClusterRole para o Operator gerenciar múltiplos namespaces
+# ClusterRole for Operator to manage multiple namespaces
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -19,14 +19,14 @@ metadata:
   labels:
     app: redis-enterprise
 rules:
-  # Permissão para listar e observar namespaces
-  # Necessário para o operator descobrir consumer namespaces
+  # Permission to list and watch namespaces
+  # Required for operator to discover consumer namespaces
   - apiGroups: [""]
     resources: ["namespaces"]
     verbs: ["list", "watch"]
 
 ---
-# ClusterRoleBinding para vincular ClusterRole ao ServiceAccount do Operator
+# ClusterRoleBinding to bind ClusterRole to Operator ServiceAccount
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -36,7 +36,7 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: redis-enterprise-operator
-    namespace: redis-enterprise  # Namespace onde o operator está instalado
+    namespace: redis-enterprise  # Namespace where operator is installed
 roleRef:
   kind: ClusterRole
   name: redis-enterprise-operator-consumer-ns

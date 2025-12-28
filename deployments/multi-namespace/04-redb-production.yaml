@@ -1,69 +1,68 @@
 # Redis Enterprise Database - Production
 #
-# REDB criado no namespace app-production, gerenciado pelo REC no namespace redis-enterprise
+# REDB created in app-production namespace, managed by REC in redis-enterprise namespace
 #
-# Características:
-#   - Memória: 2GB
-#   - Replicação: Habilitada
-#   - Persistência: AOF every-1-sec
+# Characteristics:
+#   - Memory: 2GB
+#   - Replication: Enabled
+#   - Persistence: AOF every-1-sec
 #   - Eviction: volatile-lru
-#   - Porta: 12000
+#   - Port: 12000
 #
-# Uso:
+# Usage:
 #   kubectl apply -f 04-redb-production.yaml
 #
-# Verificar:
+# Verify:
 #   kubectl get redb -n app-production
-#   kubectl describe redb prod-db-1 -n app-production
+#   kubectl describe redb prod-db -n app-production
 
 ---
 apiVersion: app.redislabs.com/v1alpha1
 kind: RedisEnterpriseDatabase
 metadata:
-  name: prod-db-1
+  name: prod-db
   namespace: app-production  # Consumer namespace
   labels:
     environment: production
     app: redis-database
 spec:
-  # Nome do REC que gerencia este REDB (no namespace redis-enterprise)
+  # Name of REC that manages this REDB (in redis-enterprise namespace)
   redisEnterpriseCluster:
-    name: redis-enterprise
+    name: rec
 
-  # Configurações do database
+  # Database configuration
   memorySize: 2GB
-  
-  # Replicação habilitada para alta disponibilidade
+
+  # Replication enabled for high availability
   replication: true
-  
-  # Persistência AOF (Append-Only File) a cada 1 segundo
-  persistence: aofEveryOneSec
-  
-  # Política de eviction: remove chaves voláteis menos usadas
+
+  # AOF (Append-Only File) persistence every 1 second
+  persistence: aofEverySecond
+
+  # Eviction policy: removes least recently used volatile keys
   evictionPolicy: volatile-lru
-  
-  # Porta do database
+
+  # Database port
   databasePort: 12000
-  
-  # Módulos Redis (todos built-in no Redis Enterprise 8.0)
-  modulesList:
-    - name: RedisJSON
-    - name: RediSearch
-    - name: RedisTimeSeries
-    - name: RedisBloom
-  
-  # TLS habilitado para conexões seguras
+
+  # TLS enabled for secure connections
   tlsMode: enabled
-  
-  # Backup configuration (opcional)
+
+  # RESP3 protocol support
+  resp3: true
+
+  # Use default user
+  defaultUser: true
+
+  # Backup configuration (optional)
   # backup:
   #   interval: 24h
   #   s3:
   #     bucketName: redis-backups-prod
-  #     subdir: prod-db-1
+  #     subdir: prod-db
 
 ---
-# Secret para credenciais do database (criado automaticamente pelo operator)
-# Você pode recuperar as credenciais com:
-#   kubectl get secret redb-prod-db-1 -n app-production -o jsonpath='{.data.password}' | base64 -d
+# Secret for database credentials (created automatically by operator)
+# You can retrieve credentials with:
+#   kubectl get secret redb-prod-db -n app-production -o jsonpath='{.data.password}' | base64 -d
 
