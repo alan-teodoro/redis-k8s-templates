@@ -1,0 +1,104 @@
+---
+# Redis Enterprise Database with LDAP Authentication
+#
+# This database uses LDAP for user authentication.
+# Users must authenticate with their LDAP credentials.
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: redis-db-ldap
+  namespace: redis-enterprise
+spec:
+  memorySize: 2GB
+  
+  # Enable replication for HA
+  replication: true
+  
+  # Enable LDAP authentication
+  authentication:
+    saslauthd: true
+  
+  # Database port
+  databasePort: 12000
+  
+  # Optional: ACL rules for LDAP users
+  # Define permissions for specific LDAP users/groups
+  aclRules:
+    # Admin user - full access
+    - user: "admin"
+      acl: "allkeys +@all"
+    
+    # Developer user - read/write access
+    - user: "developer"
+      acl: "allkeys +@all -@dangerous"
+    
+    # Read-only user
+    - user: "readonly"
+      acl: "allkeys +@read"
+    
+    # Application user - limited to app namespace
+    - user: "app-user"
+      acl: "~app:* +@all -@dangerous"
+
+---
+# Database with LDAP + Local Users
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: redis-db-mixed-auth
+  namespace: redis-enterprise
+spec:
+  memorySize: 2GB
+  replication: true
+  
+  # Enable both LDAP and local authentication
+  authentication:
+    saslauthd: true
+  
+  databasePort: 12001
+  
+  # Local admin user (fallback)
+  databaseSecretName: redis-admin-credentials
+  
+  # ACL rules for LDAP users
+  aclRules:
+    - user: "ldap-admin"
+      acl: "allkeys +@all"
+    - user: "ldap-developer"
+      acl: "allkeys +@all -@dangerous"
+
+---
+# Testing LDAP Authentication
+---
+
+# 1. Connect with LDAP credentials
+# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
+#   --user ldap-username \
+#   --pass ldap-password \
+#   PING
+
+# 2. Test from application (Python)
+# import redis
+# r = redis.Redis(
+#     host='redis-db-ldap.redis-enterprise.svc.cluster.local',
+#     port=12000,
+#     username='ldap-username',
+#     password='ldap-password'
+# )
+# print(r.ping())
+
+# 3. Test ACL permissions
+# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
+#   --user readonly \
+#   --pass ldap-password \
+#   SET test "value"
+# Expected: (error) NOPERM this user has no permissions to run the 'set' command
+
+# 4. Verify user permissions
+# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
+#   --user ldap-username \
+#   --pass ldap-password \
+#   ACL WHOAMI
+

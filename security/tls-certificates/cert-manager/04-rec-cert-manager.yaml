@@ -1,0 +1,233 @@
+---
+# Redis Enterprise Cluster with cert-manager Certificates
+#
+# This REC configuration uses certificates managed by cert-manager.
+# cert-manager automatically handles certificate issuance and renewal.
+#
+# Prerequisites:
+# 1. cert-manager installed (01-install-cert-manager.yaml)
+# 2. ClusterIssuer created (02-cluster-issuer.yaml)
+# 3. Certificates created (03-rec-certificates.yaml)
+# 4. Wait for certificates to be ready:
+#    kubectl get certificate -n redis-enterprise
+#
+# Usage:
+#   kubectl apply -f 04-rec-cert-manager.yaml
+#
+# Verify:
+#   kubectl get rec rec -n redis-enterprise
+#   kubectl describe rec rec -n redis-enterprise
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  # Cluster size
+  nodes: 3
+  
+  # Redis Enterprise version
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4"
+      memory: 8Gi
+    requests:
+      cpu: "2"
+      memory: 8Gi
+  
+  # Persistent storage
+  persistentSpec:
+    enabled: true
+    storageClassName: "gp3"  # Change to your storage class
+    volumeSize: 100Gi
+  
+  # Redis Enterprise image
+  redisEnterpriseImageSpec:
+    imagePullPolicy: IfNotPresent
+    repository: redislabs/redis
+    versionTag: 8.0.6-8  # Latest Redis Enterprise 8.0
+  
+  # Services configuration
+  servicesRiggerSpec:
+    databaseServiceType: ClusterIP
+    serviceNaming: bdb_name
+  
+  # ============================================
+  # TLS/SSL Certificates (cert-manager)
+  # ============================================
+  # These secrets are automatically created and managed by cert-manager
+  # cert-manager will automatically renew certificates before expiry
+  
+  certificates:
+    # API Certificate (Cluster Manager UI/API)
+    # Secret created by: Certificate/rec-api-cert
+    apiCertificateSecretName: rec-api-cert
+    
+    # Cluster Manager Certificate (internal communication)
+    # Secret created by: Certificate/rec-cm-cert
+    cmCertificateSecretName: rec-cm-cert
+    
+    # Proxy Certificate (client-to-database connections)
+    # Secret created by: Certificate/rec-proxy-cert
+    proxyCertificateSecretName: rec-proxy-cert
+    
+    # Syncer Certificate (Active-Active replication)
+    # Secret created by: Certificate/rec-syncer-cert
+    # Optional: Only needed for Active-Active deployments
+    syncerCertificateSecretName: rec-syncer-cert
+    
+    # Metrics Exporter Certificate (Prometheus)
+    # Secret created by: Certificate/rec-metrics-cert
+    # Optional: Only needed if Prometheus uses TLS
+    metricsExporterCertificateSecretName: rec-metrics-cert
+  
+  # ============================================
+  # Internode Encryption (TLS between nodes)
+  # ============================================
+  # Uses the same certificate as CM for internode communication
+  clusterCredentialSecretName: rec-cm-cert
+  clusterCredentialSecretType: cert
+  
+  # ============================================
+  # Additional Configuration
+  # ============================================
+  
+  # Username for cluster admin
+  username: admin@redis.com
+  
+  # Pod annotations for Prometheus monitoring
+  redisEnterprisePodAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8070"
+    prometheus.io/path: "/metrics"
+
+---
+# Certificate Renewal Process
+#
+# cert-manager automatically renews certificates when they reach 2/3 of their lifetime.
+#
+# Example: 90-day certificate → renewed at day 60
+#
+# Renewal Process:
+# 1. cert-manager monitors certificate expiry
+# 2. At renewBefore threshold (30 days before expiry), creates new CertificateRequest
+# 3. Issuer validates and signs new certificate
+# 4. cert-manager updates Kubernetes secret
+# 5. Redis Enterprise Operator detects secret change
+# 6. Operator reloads certificate (zero-downtime)
+#
+# Monitor Renewal:
+#   # Check certificate status
+#   kubectl get certificate -n redis-enterprise
+#   
+#   # Check certificate expiry
+#   kubectl describe certificate rec-api-cert -n redis-enterprise
+#   
+#   # Check certificate in secret
+#   kubectl get secret rec-api-cert -n redis-enterprise \
+#     -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -dates
+#   
+#   # Check certificate requests (renewal history)
+#   kubectl get certificaterequest -n redis-enterprise
+
+---
+# Verification Commands:
+#
+# 1. Check REC status:
+#    kubectl get rec rec -n redis-enterprise
+#    kubectl describe rec rec -n redis-enterprise
+#
+# 2. Check certificates are loaded:
+#    kubectl describe rec rec -n redis-enterprise | grep -A 10 "Certificates"
+#
+# 3. Check all certificates are ready:
+#    kubectl get certificate -n redis-enterprise
+#
+# 4. Check certificate details:
+#    kubectl get secret rec-api-cert -n redis-enterprise \
+#      -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -text
+#
+# 5. Test API access with TLS:
+#    # Get cluster admin password
+#    kubectl get secret rec -n redis-enterprise \
+#      -o jsonpath='{.data.password}' | base64 -d
+#    
+#    # Port-forward to UI
+#    kubectl port-forward -n redis-enterprise svc/rec-ui 8443:8443
+#    
+#    # Access UI: https://localhost:8443
+#    # Or test API:
+#    curl -k -u admin@redis.com:<password> \
+#      https://localhost:8443/v1/cluster
+#
+# 6. Check cluster nodes:
+#    kubectl get pods -n redis-enterprise -l app=redis-enterprise
+#
+# 7. Check cluster logs:
+#    kubectl logs -n redis-enterprise -l app=redis-enterprise --tail=100
+
+---
+# Troubleshooting:
+#
+# Issue: REC stuck in "Pending" state
+# Solution:
+#   - Check certificates are ready: kubectl get certificate -n redis-enterprise
+#   - Check certificate secrets exist: kubectl get secret -n redis-enterprise | grep cert
+#   - Check operator logs: kubectl logs -n redis-enterprise -l name=redis-enterprise-operator
+#
+# Issue: Certificate not ready
+# Solution:
+#   - Check certificate status: kubectl describe certificate rec-api-cert -n redis-enterprise
+#   - Check certificate request: kubectl get certificaterequest -n redis-enterprise
+#   - Check issuer status: kubectl describe clusterissuer selfsigned-issuer
+#   - Check cert-manager logs: kubectl logs -n cert-manager -l app=cert-manager
+#
+# Issue: Certificate renewal failed
+# Solution:
+#   - Check certificate status: kubectl describe certificate rec-api-cert -n redis-enterprise
+#   - Check certificate request: kubectl get certificaterequest -n redis-enterprise
+#   - Force renewal: kubectl delete certificaterequest -n redis-enterprise --all
+#   - Check cert-manager logs: kubectl logs -n cert-manager -l app=cert-manager
+#
+# Issue: Wrong certificate loaded
+# Solution:
+#   - Verify secretName in Certificate matches REC spec
+#   - Check certificate SANs include required FQDNs
+#   - Restart REC pods: kubectl delete pod -n redis-enterprise -l app=redis-enterprise
+
+---
+# Best Practices:
+#
+# 1. Use appropriate certificate lifetime
+#    - Recommended: 90 days or less
+#    - Shorter lifetimes = better security
+#    - cert-manager handles renewal automatically
+#
+# 2. Set renewBefore to 1/3 of lifetime
+#    - Example: 90-day cert → renewBefore: 30 days
+#    - Provides buffer for renewal issues
+#
+# 3. Monitor certificate expiry
+#    - Set up Prometheus alerts for certificate expiry
+#    - Alert 30 days before expiry
+#    - Alert on renewal failures
+#
+# 4. Use appropriate issuer for environment
+#    - Development: SelfSigned
+#    - Internal: CA or Vault
+#    - Public-facing: Let's Encrypt
+#
+# 5. Include all required SANs
+#    - Wildcard: *.redis.example.com
+#    - Cluster FQDN: rec.redis-enterprise.svc.cluster.local
+#    - UI FQDN: rec-ui.redis-enterprise.svc.cluster.local
+#    - Database FQDNs: redis-db.redis.example.com
+#
+# 6. Test certificate rotation
+#    - Manually trigger renewal to test process
+#    - Verify zero-downtime rotation
+#    - Document rollback procedure
+

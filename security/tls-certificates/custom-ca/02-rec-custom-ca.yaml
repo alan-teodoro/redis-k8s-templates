@@ -1,0 +1,176 @@
+---
+# Redis Enterprise Cluster with Custom CA Certificates
+#
+# This REC configuration uses custom CA certificates for all components:
+# - API Certificate: Cluster Manager UI/API access
+# - CM Certificate: Cluster Manager internal communication
+# - Proxy Certificate: Client-to-database connections
+# - Syncer Certificate: Active-Active replication
+# - Metrics Exporter Certificate: Prometheus metrics endpoint
+#
+# Prerequisites:
+# 1. Custom CA certificate secret created (01-ca-certificate-secret.yaml)
+# 2. Redis Enterprise Operator installed
+# 3. Namespace 'redis-enterprise' created
+#
+# Usage:
+#   kubectl apply -f 02-rec-custom-ca.yaml
+#
+# Verify:
+#   kubectl get rec rec -n redis-enterprise
+#   kubectl describe rec rec -n redis-enterprise
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  # Cluster size
+  nodes: 3
+  
+  # Redis Enterprise version
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4"
+      memory: 8Gi
+    requests:
+      cpu: "2"
+      memory: 8Gi
+  
+  # Persistent storage
+  persistentSpec:
+    enabled: true
+    storageClassName: "gp3"  # Change to your storage class
+    volumeSize: 100Gi
+  
+  # Redis Enterprise image
+  redisEnterpriseImageSpec:
+    imagePullPolicy: IfNotPresent
+    repository: redislabs/redis
+    versionTag: 8.0.6-8  # Latest Redis Enterprise 8.0
+  
+  # Services configuration
+  servicesRiggerSpec:
+    databaseServiceType: ClusterIP
+    serviceNaming: bdb_name
+  
+  # ============================================
+  # TLS/SSL Certificates Configuration
+  # ============================================
+  certificates:
+    # API Certificate (Cluster Manager UI/API)
+    # Used for: https://rec-ui.redis-enterprise.svc.cluster.local:8443
+    apiCertificateSecretName: custom-ca-cert
+    
+    # Cluster Manager Certificate (internal communication)
+    # Used for: Internal cluster management communication
+    cmCertificateSecretName: custom-ca-cert
+    
+    # Proxy Certificate (client-to-database connections)
+    # Used for: TLS connections to databases
+    # Must include wildcard or specific database FQDNs in SANs
+    proxyCertificateSecretName: custom-ca-cert
+    
+    # Syncer Certificate (Active-Active replication)
+    # Used for: Cross-cluster replication in Active-Active setups
+    # Optional: Only needed for Active-Active deployments
+    syncerCertificateSecretName: custom-ca-cert
+    
+    # Metrics Exporter Certificate (Prometheus)
+    # Used for: Prometheus metrics scraping endpoint
+    # Optional: Only needed if Prometheus uses TLS
+    metricsExporterCertificateSecretName: custom-ca-cert
+  
+  # ============================================
+  # Internode Encryption (TLS between nodes)
+  # ============================================
+  # Encrypts communication between cluster nodes
+  # Recommended for production environments
+  clusterCredentialSecretName: custom-ca-cert
+  clusterCredentialSecretType: cert  # or 'password' for password-based auth
+  
+  # ============================================
+  # Additional Security Settings
+  # ============================================
+  
+  # Username for cluster admin
+  username: admin@redis.com
+  
+  # Enforce TLS for all connections
+  # This ensures all communication is encrypted
+  enforceIPv4: false
+  
+  # Redis Enterprise license (optional)
+  # licenseSecretName: redis-enterprise-license
+  
+  # Pod annotations (optional)
+  redisEnterprisePodAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8070"
+    prometheus.io/path: "/metrics"
+  
+  # Pod security context (optional)
+  podSecurityPolicyName: ""  # Leave empty to use default
+  
+  # Service account (optional)
+  # serviceAccountName: redis-enterprise
+
+---
+# Verification Commands:
+#
+# 1. Check REC status:
+#    kubectl get rec rec -n redis-enterprise
+#    kubectl describe rec rec -n redis-enterprise
+#
+# 2. Check certificates are loaded:
+#    kubectl describe rec rec -n redis-enterprise | grep -A 10 "Certificates"
+#
+# 3. Check API certificate:
+#    kubectl get secret custom-ca-cert -n redis-enterprise \
+#      -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -text
+#
+# 4. Test API access with TLS:
+#    # Get cluster admin password
+#    kubectl get secret rec -n redis-enterprise \
+#      -o jsonpath='{.data.password}' | base64 -d
+#    
+#    # Test API access
+#    curl -k -u admin@redis.com:<password> \
+#      https://rec-ui.redis-enterprise.svc.cluster.local:8443/v1/cluster
+#
+# 5. Check cluster nodes:
+#    kubectl get pods -n redis-enterprise -l app=redis-enterprise
+#
+# 6. Check cluster logs:
+#    kubectl logs -n redis-enterprise -l app=redis-enterprise --tail=100
+
+---
+# Troubleshooting:
+#
+# Issue: REC stuck in "Pending" state
+# Solution:
+#   - Check operator logs: kubectl logs -n redis-enterprise -l name=redis-enterprise-operator
+#   - Check certificate secret exists: kubectl get secret custom-ca-cert -n redis-enterprise
+#   - Verify certificate format: kubectl describe secret custom-ca-cert -n redis-enterprise
+#
+# Issue: Certificate validation errors
+# Solution:
+#   - Verify certificate includes required SANs
+#   - Check certificate is not expired
+#   - Ensure CA certificate is included in secret
+#
+# Issue: Cannot access Cluster Manager UI
+# Solution:
+#   - Port-forward to UI: kubectl port-forward -n redis-enterprise svc/rec-ui 8443:8443
+#   - Access: https://localhost:8443
+#   - Accept self-signed certificate warning (if using self-signed CA)
+#
+# Issue: Internode communication fails
+# Solution:
+#   - Check clusterCredentialSecretName is set correctly
+#   - Verify all nodes can communicate on required ports
+#   - Check network policies allow internode traffic
+

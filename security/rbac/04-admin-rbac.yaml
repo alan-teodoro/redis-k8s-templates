@@ -1,0 +1,139 @@
+---
+# Admin RBAC
+#
+# ServiceAccount, Role, and RoleBinding for administrators.
+# Full access to all Redis Enterprise resources.
+#
+# Usage:
+#   kubectl apply -f 04-admin-rbac.yaml
+
+---
+# ServiceAccount for Admins
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-admin
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: admin
+
+---
+# Role for Admins
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: redis-admin
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: admin
+rules:
+  # Full access to all resources in namespace
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+
+---
+# RoleBinding for Admins
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redis-admin
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: redis-admin
+subjects:
+  - kind: ServiceAccount
+    name: redis-admin
+    namespace: redis-enterprise
+
+---
+# Verification:
+#
+# 1. Test full permissions (should all succeed):
+#    kubectl auth can-i create redb --as=system:serviceaccount:redis-enterprise:redis-admin -n redis-enterprise
+#    kubectl auth can-i delete rec --as=system:serviceaccount:redis-enterprise:redis-admin -n redis-enterprise
+#    kubectl auth can-i get secrets --as=system:serviceaccount:redis-enterprise:redis-admin -n redis-enterprise
+#    kubectl auth can-i delete pods --as=system:serviceaccount:redis-enterprise:redis-admin -n redis-enterprise
+#
+# 2. List all permissions:
+#    kubectl auth can-i --list --as=system:serviceaccount:redis-enterprise:redis-admin -n redis-enterprise
+
+---
+# Security Warning:
+#
+# This role grants FULL ACCESS to all resources in the namespace.
+# Use with caution and only for trusted administrators.
+#
+# Best Practices:
+# 1. Limit the number of admin users
+# 2. Use audit logging to track admin actions
+# 3. Consider using more granular permissions instead
+# 4. Regularly review who has admin access
+
+---
+# Usage with User Authentication:
+#
+# To bind this role to a user:
+#
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: RoleBinding
+# metadata:
+#   name: admin-alice
+#   namespace: redis-enterprise
+# roleRef:
+#   apiGroup: rbac.authorization.k8s.io
+#   kind: Role
+#   name: redis-admin
+# subjects:
+#   - kind: User
+#     name: alice@example.com
+#     apiGroup: rbac.authorization.k8s.io
+#
+# Or bind to an admin group:
+#
+# subjects:
+#   - kind: Group
+#     name: redis-admins
+#     apiGroup: rbac.authorization.k8s.io
+
+---
+# Alternative: More Granular Admin Role
+#
+# Instead of wildcard (*), specify exact permissions:
+#
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: Role
+# metadata:
+#   name: redis-admin-granular
+#   namespace: redis-enterprise
+# rules:
+#   # Redis Enterprise Custom Resources
+#   - apiGroups: ["app.redislabs.com"]
+#     resources: ["*"]
+#     verbs: ["*"]
+#   
+#   # Core resources
+#   - apiGroups: [""]
+#     resources:
+#       - pods
+#       - services
+#       - secrets
+#       - configmaps
+#       - persistentvolumeclaims
+#       - events
+#     verbs: ["*"]
+#   
+#   # Apps resources
+#   - apiGroups: ["apps"]
+#     resources:
+#       - statefulsets
+#       - deployments
+#     verbs: ["*"]
+

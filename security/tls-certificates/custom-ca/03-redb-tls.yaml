@@ -1,0 +1,226 @@
+---
+# Redis Enterprise Database with TLS Enabled
+#
+# This database configuration enables TLS for client connections.
+#
+# TLS Modes:
+# - disabled: No TLS (default)
+# - enabled: TLS available but not required
+# - required: TLS enforced for all connections
+#
+# Prerequisites:
+# 1. REC with custom CA certificates (02-rec-custom-ca.yaml)
+# 2. Proxy certificate includes database FQDN in SANs
+#
+# Usage:
+#   kubectl apply -f 03-redb-tls.yaml
+#
+# Verify:
+#   kubectl get redb redis-db -n redis-enterprise
+#   kubectl describe redb redis-db -n redis-enterprise
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: redis-db
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    database: redis-db
+spec:
+  # Database size
+  memorySize: 1GB
+  
+  # Redis version (uses REC default if not specified)
+  # redisVersion: "8.0"
+  
+  # Replication
+  replication: true  # Enable replication for HA
+  
+  # Persistence
+  persistence: aofEverySecond  # Options: disabled, aofEverySecond, snapshotEvery1Hour, snapshotEvery6Hour, snapshotEvery12Hour
+  
+  # ============================================
+  # TLS Configuration
+  # ============================================
+  
+  # TLS Mode
+  # - disabled: No TLS (not recommended for production)
+  # - enabled: TLS available, clients can choose to use TLS or not
+  # - required: TLS enforced, all clients must use TLS
+  tlsMode: enabled  # Change to 'required' to enforce TLS
+  
+  # Client Authentication (mTLS - mutual TLS)
+  # Optional: Require clients to present valid certificates
+  # Uncomment to enable client certificate authentication
+  # clientAuthenticationCertificates:
+  #   - client-cert-secret  # Secret containing client CA certificate
+  
+  # ============================================
+  # Database Configuration
+  # ============================================
+  
+  # Database type
+  type: redis  # Options: redis, memcached
+  
+  # Eviction policy
+  evictionPolicy: volatile-lru  # Options: volatile-lru, allkeys-lru, volatile-random, allkeys-random, volatile-ttl, noeviction
+  
+  # Database port (optional)
+  # If not specified, operator assigns port automatically
+  # databasePort: 12000
+  
+  # Database password (optional)
+  # If not specified, operator generates random password
+  # databaseSecretName: redis-db-password
+  
+  # ============================================
+  # Backup Configuration (optional)
+  # ============================================
+  # Uncomment to enable backups
+  # backup:
+  #   interval: 24  # Backup every 24 hours
+  #   s3:
+  #     awsSecretName: s3-backup-credentials
+  #     bucketName: redis-backups
+  #     subdir: production/redis-db
+  
+  # ============================================
+  # Monitoring Configuration (optional)
+  # ============================================
+  # Uncomment to enable Prometheus monitoring
+  # redisEnterpriseCluster:
+  #   name: rec
+
+---
+# Test TLS Connection
+#
+# After database is created, test TLS connection:
+#
+# 1. Get database endpoint and password:
+#    kubectl get secret redb-redis-db -n redis-enterprise \
+#      -o jsonpath='{.data.port}' | base64 -d
+#    kubectl get secret redb-redis-db -n redis-enterprise \
+#      -o jsonpath='{.data.password}' | base64 -d
+#
+# 2. Get database service:
+#    kubectl get svc -n redis-enterprise | grep redis-db
+#
+# 3. Test with redis-cli (TLS):
+#    redis-cli -h redis-db.redis-enterprise.svc.cluster.local \
+#      -p <port> \
+#      -a <password> \
+#      --tls \
+#      --cacert ca.crt \
+#      --sni redis-db.redis.example.com \
+#      PING
+#
+# 4. Test with openssl:
+#    openssl s_client -connect redis-db.redis-enterprise.svc.cluster.local:<port> \
+#      -servername redis-db.redis.example.com \
+#      -CAfile ca.crt
+#
+# 5. Test with Python (redis-py):
+#    import redis
+#    import ssl
+#    
+#    r = redis.Redis(
+#        host='redis-db.redis-enterprise.svc.cluster.local',
+#        port=<port>,
+#        password='<password>',
+#        ssl=True,
+#        ssl_ca_certs='ca.crt',
+#        ssl_cert_reqs=ssl.CERT_REQUIRED
+#    )
+#    print(r.ping())
+
+---
+# Client Certificate Authentication (mTLS)
+#
+# To enable client certificate authentication:
+#
+# 1. Generate client certificate:
+#    openssl genrsa -out client.key 2048
+#    openssl req -new -key client.key -out client.csr \
+#      -subj "/C=US/ST=CA/L=San Francisco/O=Redis/CN=redis-client"
+#    openssl x509 -req -in client.csr \
+#      -CA ca.crt -CAkey ca.key -CAcreateserial \
+#      -out client.crt -days 365 -sha256
+#
+# 2. Create client certificate secret:
+#    kubectl create secret generic client-cert-secret \
+#      --from-file=ca.crt=./ca.crt \
+#      -n redis-enterprise
+#
+# 3. Update REDB spec:
+#    spec:
+#      tlsMode: required
+#      clientAuthenticationCertificates:
+#        - client-cert-secret
+#
+# 4. Test with client certificate:
+#    redis-cli -h redis-db.redis-enterprise.svc.cluster.local \
+#      -p <port> \
+#      -a <password> \
+#      --tls \
+#      --cacert ca.crt \
+#      --cert client.crt \
+#      --key client.key \
+#      --sni redis-db.redis.example.com \
+#      PING
+
+---
+# TLS Best Practices:
+#
+# 1. Always use 'required' mode in production
+#    - Ensures all connections are encrypted
+#    - Prevents accidental plaintext connections
+#
+# 2. Use client certificate authentication for sensitive data
+#    - Adds an extra layer of security
+#    - Ensures only authorized clients can connect
+#
+# 3. Monitor TLS connections
+#    - Track TLS vs non-TLS connections
+#    - Alert on non-TLS connections in production
+#
+# 4. Use strong cipher suites
+#    - Disable weak ciphers (RC4, DES, 3DES)
+#    - Prefer TLS 1.2+ with AEAD ciphers
+#
+# 5. Rotate certificates regularly
+#    - Use cert-manager for automatic rotation
+#    - Set up alerts for certificate expiry
+#
+# 6. Test TLS configuration
+#    - Verify certificate chain
+#    - Test with different clients (redis-cli, Python, Java)
+#    - Validate SNI (Server Name Indication)
+
+---
+# Troubleshooting:
+#
+# Issue: TLS handshake failed
+# Solution:
+#   - Verify proxy certificate includes database FQDN in SANs
+#   - Check SNI matches database FQDN
+#   - Ensure CA certificate is trusted by client
+#
+# Issue: Certificate verification failed
+# Solution:
+#   - Verify CA certificate is correct
+#   - Check certificate chain is complete
+#   - Ensure certificate is not expired
+#
+# Issue: Connection refused
+# Solution:
+#   - Check database is running: kubectl get redb redis-db -n redis-enterprise
+#   - Verify service exists: kubectl get svc -n redis-enterprise | grep redis-db
+#   - Check network policies allow traffic
+#
+# Issue: Wrong certificate loaded
+# Solution:
+#   - Verify proxyCertificateSecretName in REC spec
+#   - Check certificate SANs include database FQDN
+#   - Restart REC pods if certificate was updated
+

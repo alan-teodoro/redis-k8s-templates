@@ -1,0 +1,93 @@
+---
+# Allow Backup Traffic Network Policy
+#
+# Allows Redis Enterprise to connect to external backup storage
+# (AWS S3, GCP GCS, Azure Blob Storage).
+#
+# Usage:
+#   kubectl apply -f 07-allow-backup.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backup
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: network-policy
+spec:
+  # Apply to Redis Enterprise pods
+  podSelector:
+    matchLabels:
+      app: redis-enterprise
+  
+  policyTypes:
+    - Egress
+  
+  egress:
+    # Allow HTTPS traffic to cloud storage endpoints
+    # This allows S3, GCS, Azure Blob Storage
+    - ports:
+        - protocol: TCP
+          port: 443  # HTTPS
+    
+    # Optional: Restrict to specific CIDR blocks
+    # Uncomment and customize for your cloud provider
+    
+    # AWS S3 (example - update with your region's CIDR)
+    # - to:
+    #     - ipBlock:
+    #         cidr: 52.216.0.0/15  # S3 us-east-1 (example)
+    #   ports:
+    #     - protocol: TCP
+    #       port: 443
+    
+    # GCP GCS (example - update with your region's CIDR)
+    # - to:
+    #     - ipBlock:
+    #         cidr: 34.64.0.0/10  # GCP (example)
+    #   ports:
+    #     - protocol: TCP
+    #       port: 443
+    
+    # Azure Blob Storage (example - update with your region's CIDR)
+    # - to:
+    #     - ipBlock:
+    #         cidr: 20.0.0.0/8  # Azure (example)
+    #   ports:
+    #     - protocol: TCP
+    #       port: 443
+
+---
+# Verification:
+#
+# Test backup connectivity:
+#   kubectl exec -it rec-0 -n redis-enterprise -- \
+#     curl -I https://s3.amazonaws.com
+#
+# Should return HTTP 200 or 403 (connection works, auth may fail)
+
+---
+# Security Note:
+#
+# This policy allows HTTPS to any destination. For better security:
+#
+# 1. Use specific CIDR blocks for your cloud provider
+# 2. Use DNS-based policies (if your CNI supports it)
+# 3. Use service mesh (Istio, Linkerd) for more granular control
+#
+# Example with specific CIDR (AWS S3 us-east-1):
+#
+# egress:
+#   - to:
+#       - ipBlock:
+#           cidr: 52.216.0.0/15
+#           cidr: 54.231.0.0/16
+#     ports:
+#       - protocol: TCP
+#         port: 443
+#
+# Get AWS IP ranges:
+#   curl https://ip-ranges.amazonaws.com/ip-ranges.json | \
+#     jq -r '.prefixes[] | select(.service=="S3" and .region=="us-east-1") | .ip_prefix'
+

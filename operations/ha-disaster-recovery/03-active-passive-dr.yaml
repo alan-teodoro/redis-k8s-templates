@@ -1,0 +1,190 @@
+---
+# Active-Passive Disaster Recovery Configuration
+#
+# Architecture:
+# - Primary cluster (active) in Region A
+# - Secondary cluster (passive) in Region B
+# - Automated backups from primary to S3
+# - Manual restore to secondary in case of disaster
+#
+# RTO: 5-30 minutes
+# RPO: 1-15 minutes (depending on backup frequency)
+
+---
+# Primary Cluster (Active) - Region A (e.g., us-east-1)
+---
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-primary
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  # Multi-zone deployment for HA
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app
+              operator: In
+              values:
+                - redis-enterprise
+        topologyKey: kubernetes.io/hostname
+  
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app: redis-enterprise
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4"
+      memory: 16Gi
+    requests:
+      cpu: "4"
+      memory: 16Gi
+  
+  persistentSpec:
+    enabled: true
+    volumeSize: 100Gi
+    storageClassName: gp3
+
+---
+# Primary Database (Active)
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: redis-db-primary
+  namespace: redis-enterprise
+spec:
+  memorySize: 4GB
+  replication: true
+  persistence: aofEverySecond
+  
+  # Automated backups to S3 (cross-region)
+  backup:
+    s3:
+      bucketName: redis-dr-backups
+      subdir: primary/redis-db
+      awsRegion: us-west-2  # Different region for DR
+      awsSecretName: s3-credentials
+    
+    # Backup every 15 minutes for low RPO
+    interval: "*/15 * * * *"
+    
+    # Keep last 96 backups (24 hours)
+    retention: 96
+  
+  # Database configuration
+  databasePort: 12000
+  databaseSecretName: redis-db-credentials
+
+---
+# Secondary Cluster (Passive) - Region B (e.g., us-west-2)
+---
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-secondary
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  # Same configuration as primary
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app
+              operator: In
+              values:
+                - redis-enterprise
+        topologyKey: kubernetes.io/hostname
+  
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app: redis-enterprise
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4"
+      memory: 16Gi
+    requests:
+      cpu: "4"
+      memory: 16Gi
+  
+  persistentSpec:
+    enabled: true
+    volumeSize: 100Gi
+    storageClassName: gp3
+
+---
+# Secondary Database (Passive - Standby)
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: redis-db-secondary
+  namespace: redis-enterprise
+spec:
+  memorySize: 4GB
+  replication: true
+  persistence: aofEverySecond
+  
+  # Same configuration as primary
+  databasePort: 12000
+  databaseSecretName: redis-db-credentials
+
+---
+# Disaster Recovery Procedure
+---
+
+# 1. Monitor Primary Cluster
+# kubectl get rec rec-primary -n redis-enterprise --context=primary-cluster
+# kubectl get redb redis-db-primary -n redis-enterprise --context=primary-cluster
+
+# 2. In case of disaster, restore latest backup to secondary
+# a. List available backups
+# aws s3 ls s3://redis-dr-backups/primary/redis-db/
+
+# b. Restore to secondary cluster
+# kubectl exec -it rec-secondary-0 -n redis-enterprise --context=secondary-cluster -- \
+#   rladmin restore database db:1 \
+#   s3_bucket_name redis-dr-backups \
+#   s3_subdir primary/redis-db \
+#   s3_backup_file <backup-file-name>
+
+# 3. Update DNS/Load Balancer to point to secondary cluster
+# (This is application-specific)
+
+# 4. Verify secondary is serving traffic
+# redis-cli -h redis-db-secondary.redis-enterprise.svc.cluster.local -p 12000 PING
+
+---
+# Failback Procedure (After primary is restored)
+---
+
+# 1. Backup secondary (now active)
+# kubectl exec -it rec-secondary-0 -n redis-enterprise --context=secondary-cluster -- \
+#   rladmin backup database db:1
+
+# 2. Restore to primary
+# kubectl exec -it rec-primary-0 -n redis-enterprise --context=primary-cluster -- \
+#   rladmin restore database db:1 \
+#   s3_bucket_name redis-dr-backups \
+#   s3_subdir secondary/redis-db \
+#   s3_backup_file <backup-file-name>
+
+# 3. Update DNS/Load Balancer back to primary
+
+# 4. Resume automated backups on primary
+

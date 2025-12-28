@@ -1,0 +1,56 @@
+---
+# Allow DNS Network Policy
+#
+# Allows all pods to query DNS (kube-dns/coredns).
+# Required for service discovery and name resolution.
+#
+# Usage:
+#   kubectl apply -f 02-allow-dns.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: network-policy
+spec:
+  # Apply to all pods in namespace
+  podSelector: {}
+  
+  policyTypes:
+    - Egress
+  
+  egress:
+    # Allow DNS queries to kube-dns/coredns
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+        - podSelector:
+            matchLabels:
+              k8s-app: kube-dns  # For kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    
+    # Alternative: Allow DNS to any destination on port 53
+    # Use this if kube-dns doesn't have the label above
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# Verification:
+#
+# Test DNS resolution:
+#   kubectl run -it --rm debug --image=busybox --restart=Never -n redis-enterprise -- \
+#     nslookup kubernetes.default
+#
+# Should return IP address of kubernetes service
+

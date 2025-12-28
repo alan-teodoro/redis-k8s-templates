@@ -1,0 +1,95 @@
+---
+# Allow Client Access to Redis Databases Network Policy
+#
+# Allows client applications to connect to Redis databases.
+# Customize the namespaceSelector to match your client namespaces.
+#
+# Usage:
+#   kubectl apply -f 05-allow-client-access.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-client-access
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: network-policy
+spec:
+  # Apply to Redis Enterprise pods
+  podSelector:
+    matchLabels:
+      app: redis-enterprise
+  
+  policyTypes:
+    - Ingress
+  
+  ingress:
+    # Allow from specific namespaces (recommended)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              redis-client: "true"  # Label your client namespaces
+      ports:
+        - protocol: TCP
+          port: 10000-20000  # Database ports range
+    
+    # Alternative: Allow from specific namespace by name
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+      ports:
+        - protocol: TCP
+          port: 10000-20000
+    
+    # Alternative: Allow from any namespace (NOT RECOMMENDED for production)
+    # Uncomment only for testing
+    # - from:
+    #     - namespaceSelector: {}
+    #   ports:
+    #     - protocol: TCP
+    #       port: 10000-20000
+
+---
+# Setup Instructions:
+#
+# 1. Label client namespaces:
+#    kubectl label namespace default redis-client=true
+#    kubectl label namespace app-namespace redis-client=true
+#
+# 2. Apply this policy:
+#    kubectl apply -f 05-allow-client-access.yaml
+#
+# 3. Verify client can connect:
+#    kubectl run -it --rm redis-cli --image=redis:latest --restart=Never -n default -- \
+#      redis-cli -h redis-db.redis-enterprise.svc.cluster.local -p 12000 PING
+
+---
+# Advanced: Allow specific pods only
+#
+# To allow only specific pods (not entire namespace):
+#
+# apiVersion: networking.k8s.io/v1
+# kind: NetworkPolicy
+# metadata:
+#   name: allow-client-access
+#   namespace: redis-enterprise
+# spec:
+#   podSelector:
+#     matchLabels:
+#       app: redis-enterprise
+#   policyTypes:
+#     - Ingress
+#   ingress:
+#     - from:
+#         - namespaceSelector:
+#             matchLabels:
+#               kubernetes.io/metadata.name: default
+#           podSelector:
+#             matchLabels:
+#               app: my-app  # Only pods with this label
+#       ports:
+#         - protocol: TCP
+#           port: 10000-20000
+

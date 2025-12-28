@@ -1,0 +1,166 @@
+---
+# High Availability Redis Enterprise Cluster
+#
+# This configuration provides:
+# - 3-node cluster for quorum
+# - Pod anti-affinity for node distribution
+# - Persistent storage with replication
+# - Automatic failover
+#
+# Usage:
+#   kubectl apply -f 01-ha-cluster.yaml
+
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-ha
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    deployment: ha
+spec:
+  # Minimum 3 nodes for HA (quorum)
+  nodes: 3
+  
+  # Resource allocation per node
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4"
+      memory: 16Gi
+    requests:
+      cpu: "2"
+      memory: 16Gi
+  
+  # Persistent storage
+  persistentSpec:
+    enabled: true
+    storageClassName: "gp3"  # Use replicated storage class
+    volumeSize: 100Gi
+  
+  # Redis Enterprise image
+  redisEnterpriseImageSpec:
+    repository: redislabs/redis
+    versionTag: 8.0.6-8
+  
+  # Service configuration
+  servicesRiggerSpec:
+    databaseServiceType: ClusterIP
+    serviceNaming: bdb_name
+  
+  # Credentials
+  username: admin@redis.com
+  
+  # ============================================
+  # High Availability Configuration
+  # ============================================
+  
+  # Pod anti-affinity - spread pods across nodes
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app
+              operator: In
+              values:
+                - redis-enterprise
+        topologyKey: kubernetes.io/hostname
+  
+  # Topology spread constraints - spread across zones
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app: redis-enterprise
+  
+  # Pod disruption budget
+  podDisruptionBudget:
+    maxUnavailable: 1  # Allow only 1 pod to be unavailable at a time
+
+---
+# High Availability Database
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: redis-db-ha
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    deployment: ha
+spec:
+  memorySize: 2GB
+  
+  # Replication for HA
+  replication: true
+  
+  # Persistence for durability
+  persistence: aofEverySecond  # AOF for minimal data loss
+  
+  # Database type
+  type: redis
+  
+  # Eviction policy
+  evictionPolicy: volatile-lru
+  
+  # Database port
+  databasePort: 12000
+  
+  # High availability settings
+  shardCount: 1
+  replicasPerShard: 1  # 1 master + 1 replica = 2 copies
+  
+  # Backup configuration (optional)
+  backup:
+    interval: 6h  # Backup every 6 hours
+    s3:
+      bucketName: redis-backups
+      subdir: ha-cluster
+
+---
+# Verification:
+#
+# 1. Check cluster status:
+#    kubectl get rec rec-ha -n redis-enterprise
+#
+# 2. Verify pods are spread across nodes:
+#    kubectl get pods -n redis-enterprise -o wide
+#
+# 3. Check database replication:
+#    kubectl exec -it rec-ha-0 -n redis-enterprise -- rladmin status databases
+#
+# 4. Test failover:
+#    # Delete master pod
+#    kubectl delete pod rec-ha-0 -n redis-enterprise
+#    
+#    # Verify automatic failover (< 30 seconds)
+#    kubectl exec -it rec-ha-1 -n redis-enterprise -- rladmin status
+#    
+#    # Verify database is still accessible
+#    redis-cli -h redis-db-ha.redis-enterprise.svc.cluster.local -p 12000 PING
+
+---
+# Notes:
+#
+# 1. Pod Anti-Affinity:
+#    - Ensures pods run on different nodes
+#    - Prevents single node failure from affecting multiple pods
+#
+# 2. Topology Spread Constraints:
+#    - Spreads pods across availability zones
+#    - Provides zone-level fault tolerance
+#
+# 3. Pod Disruption Budget:
+#    - Limits concurrent pod disruptions
+#    - Ensures cluster quorum during maintenance
+#
+# 4. Database Replication:
+#    - Each shard has 1 master + 1 replica
+#    - Automatic failover on master failure
+#    - RPO: seconds (with AOF)
+#    - RTO: < 30 seconds
+#
+# 5. Persistence:
+#    - aofEverySecond: Minimal data loss (1 second)
+#    - Alternative: snapshotEvery1Hour (less frequent, more data loss)
+

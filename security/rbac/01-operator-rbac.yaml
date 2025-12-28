@@ -1,0 +1,121 @@
+---
+# Redis Enterprise Operator RBAC
+#
+# ServiceAccount, Role, and RoleBinding for Redis Enterprise Operator.
+# The operator needs permissions to manage REC/REDB resources.
+#
+# Usage:
+#   kubectl apply -f 01-operator-rbac.yaml
+
+---
+# ServiceAccount for Redis Enterprise Operator
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-operator
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: operator
+
+---
+# Role for Redis Enterprise Operator
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: redis-operator
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: operator
+rules:
+  # Redis Enterprise Custom Resources
+  - apiGroups: ["app.redislabs.com"]
+    resources:
+      - redisenterpriseclusters
+      - redisenterprisedatabases
+      - redisenterpriseclusters/status
+      - redisenterprisedatabases/status
+      - redisenterpriseclusters/finalizers
+      - redisenterprisedatabases/finalizers
+    verbs: ["*"]
+  
+  # Pods
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/exec"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Services
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Secrets
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # ConfigMaps
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # PersistentVolumeClaims
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  
+  # StatefulSets
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Deployments
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+# RoleBinding for Redis Enterprise Operator
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redis-operator
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: redis-operator
+subjects:
+  - kind: ServiceAccount
+    name: redis-operator
+    namespace: redis-enterprise
+
+---
+# Verification:
+#
+# 1. Check ServiceAccount:
+#    kubectl get serviceaccount redis-operator -n redis-enterprise
+#
+# 2. Check Role:
+#    kubectl get role redis-operator -n redis-enterprise
+#    kubectl describe role redis-operator -n redis-enterprise
+#
+# 3. Check RoleBinding:
+#    kubectl get rolebinding redis-operator -n redis-enterprise
+#
+# 4. Test permissions:
+#    kubectl auth can-i create redb --as=system:serviceaccount:redis-enterprise:redis-operator -n redis-enterprise
+#    kubectl auth can-i delete pods --as=system:serviceaccount:redis-enterprise:redis-operator -n redis-enterprise
+#
+# 5. List all permissions:
+#    kubectl auth can-i --list --as=system:serviceaccount:redis-enterprise:redis-operator -n redis-enterprise
+

@@ -1,0 +1,152 @@
+---
+# Automated Backup Schedule for Redis Enterprise Database
+#
+# This configuration enables automated backups every 6 hours to S3.
+# Adjust the interval and retention based on your RPO requirements.
+
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: redis-db-with-backup
+  namespace: redis-enterprise
+spec:
+  memorySize: 2GB
+  
+  # Replication for HA
+  replication: true
+  
+  # Persistence for durability
+  persistence: aofEverySecond
+  
+  # Automated Backup Configuration
+  backup:
+    # S3 backup destination
+    s3:
+      # S3 bucket name
+      bucketName: redis-backups
+      
+      # S3 bucket path (optional)
+      subdir: production/redis-db
+      
+      # AWS region
+      awsRegion: us-east-1
+      
+      # S3 credentials secret
+      # Create with: kubectl create secret generic s3-credentials \
+      #   --from-literal=AWS_ACCESS_KEY_ID=xxx \
+      #   --from-literal=AWS_SECRET_ACCESS_KEY=yyy \
+      #   -n redis-enterprise
+      awsSecretName: s3-credentials
+    
+    # Backup schedule (cron format)
+    # Every 6 hours: "0 */6 * * *"
+    # Every 12 hours: "0 */12 * * *"
+    # Daily at 2 AM: "0 2 * * *"
+    interval: "0 */6 * * *"
+    
+    # Backup retention (number of backups to keep)
+    # Keep last 7 backups (42 hours with 6-hour interval)
+    retention: 7
+
+---
+# Alternative: GCS Backup Schedule
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: redis-db-gcs-backup
+  namespace: redis-enterprise
+spec:
+  memorySize: 2GB
+  replication: true
+  persistence: aofEverySecond
+  
+  backup:
+    # GCS backup destination
+    gcs:
+      # GCS bucket name
+      bucketName: redis-backups-gcs
+      
+      # GCS bucket path (optional)
+      subdir: production/redis-db
+      
+      # GCS credentials secret
+      gcsSecretName: gcs-credentials
+    
+    # Every 6 hours
+    interval: "0 */6 * * *"
+    
+    # Keep last 7 backups
+    retention: 7
+
+---
+# Alternative: Azure Blob Backup Schedule
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: redis-db-azure-backup
+  namespace: redis-enterprise
+spec:
+  memorySize: 2GB
+  replication: true
+  persistence: aofEverySecond
+  
+  backup:
+    # Azure Blob Storage backup destination
+    abs:
+      # Storage account name
+      absSecretName: azure-storage-credentials
+      
+      # Container name
+      container: redis-backups
+      
+      # Blob path (optional)
+      subdir: production/redis-db
+    
+    # Every 6 hours
+    interval: "0 */6 * * *"
+    
+    # Keep last 7 backups
+    retention: 7
+
+---
+# Backup Schedule Examples by RPO
+---
+
+# RPO: 15 minutes (very aggressive)
+# interval: "*/15 * * * *"
+# retention: 96  # Keep 24 hours of backups
+
+# RPO: 1 hour
+# interval: "0 * * * *"
+# retention: 24  # Keep 24 hours of backups
+
+# RPO: 6 hours (recommended for most production)
+# interval: "0 */6 * * *"
+# retention: 7   # Keep 42 hours of backups
+
+# RPO: 12 hours
+# interval: "0 */12 * * *"
+# retention: 14  # Keep 7 days of backups
+
+# RPO: 24 hours (daily)
+# interval: "0 2 * * *"
+# retention: 30  # Keep 30 days of backups
+
+---
+# Verification Commands
+---
+
+# Check backup status
+# kubectl get redb redis-db-with-backup -n redis-enterprise -o jsonpath='{.status.backup}'
+
+# View backup history
+# kubectl exec -it rec-0 -n redis-enterprise -- rladmin status databases extra backup_status
+
+# Manually trigger backup
+# kubectl exec -it rec-0 -n redis-enterprise -- rladmin backup database db:1
+
+# List backups in S3
+# aws s3 ls s3://redis-backups/production/redis-db/
+

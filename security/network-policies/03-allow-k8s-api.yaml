@@ -1,0 +1,53 @@
+---
+# Allow Kubernetes API Network Policy
+#
+# Allows Redis Enterprise Operator to communicate with Kubernetes API server.
+# Required for operator to manage REC/REDB resources.
+#
+# Usage:
+#   kubectl apply -f 03-allow-k8s-api.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-k8s-api
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: network-policy
+spec:
+  # Apply to all pods in namespace
+  podSelector: {}
+  
+  policyTypes:
+    - Egress
+  
+  egress:
+    # Allow access to Kubernetes API server
+    # Method 1: Allow to kubernetes service in default namespace
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: default
+        - podSelector:
+            matchLabels:
+              component: apiserver
+      ports:
+        - protocol: TCP
+          port: 443
+    
+    # Method 2: Allow to any destination on port 443 (HTTPS)
+    # This is more permissive but simpler
+    - ports:
+        - protocol: TCP
+          port: 443
+
+---
+# Verification:
+#
+# Test Kubernetes API access:
+#   kubectl run -it --rm debug --image=curlimages/curl --restart=Never -n redis-enterprise -- \
+#     curl -k https://kubernetes.default.svc.cluster.local
+#
+# Should return API server response (may be unauthorized, but connection works)
+

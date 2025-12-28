@@ -1,0 +1,140 @@
+---
+# Pod Security Admission for Redis Enterprise Namespace
+#
+# Applies Pod Security Standards to the redis-enterprise namespace.
+# Uses Baseline level for good security without breaking Redis Enterprise.
+#
+# Kubernetes 1.25+ required
+#
+# Usage:
+#   kubectl apply -f 01-pod-security-admission.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: redis-enterprise
+  labels:
+    # Pod Security Standards enforcement
+    # Options: privileged, baseline, restricted
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    
+    # Audit mode - logs violations but doesn't block
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/audit-version: latest
+    
+    # Warn mode - shows warnings but doesn't block
+    pod-security.kubernetes.io/warn: baseline
+    pod-security.kubernetes.io/warn-version: latest
+
+---
+# Pod Security Levels Explained:
+#
+# 1. Privileged (pod-security.kubernetes.io/enforce: privileged)
+#    - Unrestricted policy
+#    - Allows all capabilities
+#    - NOT RECOMMENDED for production
+#
+# 2. Baseline (pod-security.kubernetes.io/enforce: baseline) - RECOMMENDED
+#    - Prevents known privilege escalations
+#    - Minimally restrictive
+#    - Good balance for Redis Enterprise
+#    - Restrictions:
+#      ❌ No host namespaces (hostNetwork, hostPID, hostIPC)
+#      ❌ No privileged containers
+#      ❌ No host path volumes
+#      ❌ Limited capabilities
+#
+# 3. Restricted (pod-security.kubernetes.io/enforce: restricted)
+#    - Heavily restricted
+#    - Follows pod hardening best practices
+#    - May be too restrictive for Redis Enterprise
+#    - Additional restrictions:
+#      ❌ Must run as non-root
+#      ❌ Must drop ALL capabilities
+#      ❌ No privilege escalation
+#      ❌ Read-only root filesystem
+
+---
+# Modes Explained:
+#
+# 1. enforce - Violations will reject the pod
+# 2. audit - Violations are logged but pod is allowed
+# 3. warn - Violations show warning but pod is allowed
+#
+# Recommended: Use all three modes
+# - enforce: Blocks violations
+# - audit: Logs for compliance
+# - warn: Alerts users
+
+---
+# Verification:
+#
+# 1. Check namespace labels:
+#    kubectl get namespace redis-enterprise --show-labels
+#
+# 2. Test with privileged pod (should fail):
+#    kubectl run -it --rm test --image=nginx --restart=Never -n redis-enterprise \
+#      --overrides='{"spec":{"containers":[{"name":"test","image":"nginx","securityContext":{"privileged":true}}]}}'
+#
+# 3. Check audit logs:
+#    kubectl get events -n redis-enterprise | grep "violates PodSecurity"
+
+---
+# Migration from PodSecurityPolicy (PSP):
+#
+# If migrating from PSP (deprecated in 1.21, removed in 1.25):
+#
+# 1. Review existing PSP:
+#    kubectl get psp
+#
+# 2. Map PSP to Pod Security Standards:
+#    - Permissive PSP → Baseline
+#    - Restrictive PSP → Restricted
+#
+# 3. Apply Pod Security Admission labels
+#
+# 4. Test thoroughly
+#
+# 5. Remove PSP:
+#    kubectl delete psp <psp-name>
+
+---
+# Advanced: Different levels for different modes
+#
+# Example: Enforce baseline, but audit restricted
+#
+# apiVersion: v1
+# kind: Namespace
+# metadata:
+#   name: redis-enterprise
+#   labels:
+#     pod-security.kubernetes.io/enforce: baseline
+#     pod-security.kubernetes.io/audit: restricted
+#     pod-security.kubernetes.io/warn: restricted
+#
+# This allows baseline pods but logs/warns about restricted violations
+
+---
+# Exemptions (use sparingly):
+#
+# To exempt specific users/namespaces/runtimeClasses:
+#
+# Create AdmissionConfiguration:
+#
+# apiVersion: apiserver.config.k8s.io/v1
+# kind: AdmissionConfiguration
+# plugins:
+# - name: PodSecurity
+#   configuration:
+#     apiVersion: pod-security.admission.config.k8s.io/v1
+#     kind: PodSecurityConfiguration
+#     defaults:
+#       enforce: "baseline"
+#       audit: "baseline"
+#       warn: "baseline"
+#     exemptions:
+#       usernames: []
+#       runtimeClasses: []
+#       namespaces: ["kube-system"]
+

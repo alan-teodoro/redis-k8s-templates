@@ -1,0 +1,73 @@
+---
+# Default Deny All Network Policy
+#
+# This policy implements a zero-trust network model by denying all
+# ingress and egress traffic by default. Other policies will explicitly
+# allow required traffic.
+#
+# WARNING: This will block all traffic until allow policies are applied.
+# Apply allow policies (02-07) immediately after this one.
+#
+# Usage:
+#   kubectl apply -f 01-default-deny-all.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: network-policy
+spec:
+  # Apply to all pods in namespace
+  podSelector: {}
+  
+  # Policy types
+  policyTypes:
+    - Ingress  # Block all incoming traffic
+    - Egress   # Block all outgoing traffic
+  
+  # Empty ingress/egress rules = deny all
+  # No ingress rules = deny all ingress
+  # No egress rules = deny all egress
+
+---
+# Verification:
+#
+# 1. Check policy is applied:
+#    kubectl get networkpolicy deny-all -n redis-enterprise
+#
+# 2. Test that traffic is blocked:
+#    kubectl run -it --rm debug --image=busybox --restart=Never -n redis-enterprise -- \
+#      wget -O- http://example.com
+#    # Should fail with timeout
+#
+# 3. Check policy details:
+#    kubectl describe networkpolicy deny-all -n redis-enterprise
+
+---
+# Important Notes:
+#
+# 1. This policy blocks ALL traffic including:
+#    - DNS queries
+#    - Kubernetes API access
+#    - Redis internode communication
+#    - Client connections
+#    - Monitoring
+#    - Backups
+#
+# 2. Apply allow policies immediately after:
+#    kubectl apply -f 02-allow-dns.yaml
+#    kubectl apply -f 03-allow-k8s-api.yaml
+#    kubectl apply -f 04-allow-redis-internode.yaml
+#    kubectl apply -f 05-allow-client-access.yaml
+#    kubectl apply -f 06-allow-prometheus.yaml
+#    kubectl apply -f 07-allow-backup.yaml
+#
+# 3. To temporarily disable (for troubleshooting):
+#    kubectl delete networkpolicy deny-all -n redis-enterprise
+#
+# 4. To re-enable:
+#    kubectl apply -f 01-default-deny-all.yaml
+

@@ -1,0 +1,119 @@
+---
+# Read-Only RBAC for Monitoring
+#
+# ServiceAccount, Role, and RoleBinding for read-only access.
+# Used by monitoring tools like Prometheus.
+#
+# Usage:
+#   kubectl apply -f 02-readonly-rbac.yaml
+
+---
+# ServiceAccount for Read-Only Access
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-readonly
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: monitoring
+
+---
+# Role for Read-Only Access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: redis-readonly
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: monitoring
+rules:
+  # Redis Enterprise Custom Resources (read-only)
+  - apiGroups: ["app.redislabs.com"]
+    resources:
+      - redisenterpriseclusters
+      - redisenterprisedatabases
+      - redisenterpriseclusters/status
+      - redisenterprisedatabases/status
+    verbs: ["get", "list", "watch"]
+  
+  # Pods (read-only)
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  
+  # Services (read-only)
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  
+  # ConfigMaps (read-only)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  
+  # Events (read-only)
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
+---
+# RoleBinding for Read-Only Access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redis-readonly
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: redis-readonly
+subjects:
+  - kind: ServiceAccount
+    name: redis-readonly
+    namespace: redis-enterprise
+
+---
+# Verification:
+#
+# 1. Test read permissions (should succeed):
+#    kubectl auth can-i get pods --as=system:serviceaccount:redis-enterprise:redis-readonly -n redis-enterprise
+#    kubectl auth can-i list redb --as=system:serviceaccount:redis-enterprise:redis-readonly -n redis-enterprise
+#
+# 2. Test write permissions (should fail):
+#    kubectl auth can-i create pods --as=system:serviceaccount:redis-enterprise:redis-readonly -n redis-enterprise
+#    kubectl auth can-i delete redb --as=system:serviceaccount:redis-enterprise:redis-readonly -n redis-enterprise
+#
+# 3. List all permissions:
+#    kubectl auth can-i --list --as=system:serviceaccount:redis-enterprise:redis-readonly -n redis-enterprise
+
+---
+# Usage with Prometheus:
+#
+# Update Prometheus ServiceAccount to use this role:
+#
+# apiVersion: v1
+# kind: ServiceAccount
+# metadata:
+#   name: prometheus
+#   namespace: monitoring
+#
+# ---
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: RoleBinding
+# metadata:
+#   name: prometheus-redis-readonly
+#   namespace: redis-enterprise
+# roleRef:
+#   apiGroup: rbac.authorization.k8s.io
+#   kind: Role
+#   name: redis-readonly
+# subjects:
+#   - kind: ServiceAccount
+#     name: prometheus
+#     namespace: monitoring
+

@@ -1,0 +1,266 @@
+---
+# Certificate Resources for Redis Enterprise Cluster
+#
+# These Certificate CRDs define the certificates needed for Redis Enterprise:
+# 1. API Certificate - Cluster Manager UI/API access
+# 2. Proxy Certificate - Client-to-database connections
+# 3. CM Certificate - Cluster Manager internal communication
+# 4. Syncer Certificate - Active-Active replication
+# 5. Metrics Exporter Certificate - Prometheus metrics endpoint
+#
+# cert-manager will automatically:
+# - Request certificates from the specified issuer
+# - Create Kubernetes secrets with the certificates
+# - Renew certificates before expiry
+#
+# Prerequisites:
+# 1. cert-manager installed
+# 2. ClusterIssuer created (02-cluster-issuer.yaml)
+#
+# Usage:
+#   kubectl apply -f 03-rec-certificates.yaml
+
+---
+# 1. API Certificate (Cluster Manager UI/API)
+#
+# Used for: https://rec-ui.redis-enterprise.svc.cluster.local:8443
+# Required: Yes
+# Auto-renewal: Yes (at 2/3 of lifetime)
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rec-api-cert
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: api-certificate
+spec:
+  # Secret name where certificate will be stored
+  secretName: rec-api-cert
+  
+  # Certificate issuer
+  issuerRef:
+    name: selfsigned-issuer  # Change to your issuer
+    kind: ClusterIssuer
+  
+  # Certificate subject
+  commonName: rec.redis-enterprise.svc.cluster.local
+  
+  # Subject Alternative Names (SANs)
+  dnsNames:
+    - rec.redis-enterprise.svc.cluster.local
+    - rec-ui.redis-enterprise.svc.cluster.local
+    - "*.rec.redis-enterprise.svc.cluster.local"
+    - rec.redis.example.com  # External FQDN (if using ingress)
+  
+  # Certificate validity
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # Renew 30 days before expiry (at day 60)
+  
+  # Private key configuration
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    # Or use ECDSA for better performance:
+    # algorithm: ECDSA
+    # size: 256
+  
+  # Key usages
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+
+---
+# 2. Proxy Certificate (Client-to-Database Connections)
+#
+# Used for: TLS connections to databases
+# Required: Optional (only if using TLS for databases)
+# Must include: Wildcard or specific database FQDNs in SANs
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rec-proxy-cert
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: proxy-certificate
+spec:
+  secretName: rec-proxy-cert
+  
+  issuerRef:
+    name: selfsigned-issuer  # Change to your issuer
+    kind: ClusterIssuer
+  
+  commonName: "*.redis.example.com"
+  
+  # IMPORTANT: Include all database FQDNs
+  dnsNames:
+    - "*.redis.example.com"  # Wildcard for all databases
+    - "*.redis-enterprise.svc.cluster.local"  # Internal cluster DNS
+    - redis-db.redis.example.com  # Specific database FQDN
+  
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # Renew 30 days before expiry
+  
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+
+---
+# 3. CM Certificate (Cluster Manager Internal Communication)
+#
+# Used for: Internal cluster management communication
+# Required: Yes
+# Auto-renewal: Yes
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rec-cm-cert
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: cm-certificate
+spec:
+  secretName: rec-cm-cert
+  
+  issuerRef:
+    name: selfsigned-issuer  # Change to your issuer
+    kind: ClusterIssuer
+  
+  commonName: rec-cm.redis-enterprise.svc.cluster.local
+  
+  dnsNames:
+    - rec-cm.redis-enterprise.svc.cluster.local
+    - "*.rec.redis-enterprise.svc.cluster.local"
+  
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # Renew 30 days before expiry
+  
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+
+---
+# 4. Syncer Certificate (Active-Active Replication)
+#
+# Used for: Cross-cluster replication in Active-Active setups
+# Required: Optional (only for Active-Active deployments)
+# Auto-renewal: Yes
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rec-syncer-cert
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: syncer-certificate
+spec:
+  secretName: rec-syncer-cert
+  
+  issuerRef:
+    name: selfsigned-issuer  # Change to your issuer
+    kind: ClusterIssuer
+  
+  commonName: rec-syncer.redis-enterprise.svc.cluster.local
+  
+  dnsNames:
+    - rec-syncer.redis-enterprise.svc.cluster.local
+    - "*.rec.redis-enterprise.svc.cluster.local"
+  
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # Renew 30 days before expiry
+  
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+
+---
+# 5. Metrics Exporter Certificate (Prometheus)
+#
+# Used for: Prometheus metrics scraping endpoint
+# Required: Optional (only if Prometheus uses TLS)
+# Auto-renewal: Yes
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rec-metrics-cert
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: metrics-certificate
+spec:
+  secretName: rec-metrics-cert
+  
+  issuerRef:
+    name: selfsigned-issuer  # Change to your issuer
+    kind: ClusterIssuer
+  
+  commonName: rec-metrics.redis-enterprise.svc.cluster.local
+  
+  dnsNames:
+    - rec-metrics.redis-enterprise.svc.cluster.local
+    - "*.rec.redis-enterprise.svc.cluster.local"
+  
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # Renew 30 days before expiry
+  
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+
+---
+# Verification Commands:
+#
+# 1. Check certificate status:
+#    kubectl get certificate -n redis-enterprise
+#
+# 2. Describe certificate:
+#    kubectl describe certificate rec-api-cert -n redis-enterprise
+#
+# 3. Check certificate is ready:
+#    kubectl get certificate rec-api-cert -n redis-enterprise \
+#      -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+#
+# 4. Check secret was created:
+#    kubectl get secret rec-api-cert -n redis-enterprise
+#
+# 5. Check certificate details in secret:
+#    kubectl get secret rec-api-cert -n redis-enterprise \
+#      -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -text
+#
+# 6. Check certificate expiry:
+#    kubectl get secret rec-api-cert -n redis-enterprise \
+#      -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -dates
+#
+# 7. Monitor certificate renewal:
+#    kubectl get certificaterequest -n redis-enterprise
+

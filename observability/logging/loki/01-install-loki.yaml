@@ -1,0 +1,181 @@
+---
+# Install Grafana Loki Stack using Helm
+#
+# This includes Loki, Promtail, and optionally Grafana.
+#
+# Prerequisites:
+#   - Helm 3 installed
+#   - kubectl access to cluster
+#
+# Usage:
+#   # Add Grafana Helm repository
+#   helm repo add grafana https://grafana.github.io/helm-charts
+#   helm repo update
+#
+#   # Create namespace
+#   kubectl create namespace logging
+#
+#   # Install using this values file
+#   helm install loki grafana/loki-stack \
+#     --namespace logging \
+#     --values 01-install-loki.yaml
+
+# Loki configuration
+loki:
+  enabled: true
+  
+  # Persistence for Loki data
+  persistence:
+    enabled: true
+    storageClassName: "gp3"  # Change to your storage class
+    size: 10Gi
+  
+  # Resource limits
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Loki configuration
+  config:
+    # Retention period (default: no retention)
+    table_manager:
+      retention_deletes_enabled: true
+      retention_period: 720h  # 30 days
+    
+    # Storage configuration
+    storage_config:
+      boltdb_shipper:
+        active_index_directory: /data/loki/boltdb-shipper-active
+        cache_location: /data/loki/boltdb-shipper-cache
+        shared_store: filesystem
+      filesystem:
+        directory: /data/loki/chunks
+    
+    # Limits
+    limits_config:
+      enforce_metric_name: false
+      reject_old_samples: true
+      reject_old_samples_max_age: 168h  # 7 days
+      ingestion_rate_mb: 10
+      ingestion_burst_size_mb: 20
+
+# Promtail configuration (log collector)
+promtail:
+  enabled: true
+  
+  # Resource limits
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  
+  # Promtail configuration
+  config:
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+    
+    # Scrape configs
+    scrapeConfigs: |
+      # Kubernetes pods
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          # Add namespace label
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          
+          # Add pod name label
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          
+          # Add container name label
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+          
+          # Add node name label
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+          
+          # Add app label
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          
+          # Drop logs from kube-system (optional)
+          # - source_labels: [__meta_kubernetes_namespace]
+          #   regex: kube-system
+          #   action: drop
+
+# Grafana configuration (optional)
+grafana:
+  enabled: true  # Set to false if you already have Grafana
+  
+  # Admin password
+  adminPassword: "admin"  # Change this!
+  
+  # Resource limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  
+  # Persistence for Grafana data
+  persistence:
+    enabled: true
+    storageClassName: "gp3"
+    size: 5Gi
+  
+  # Data sources
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Loki
+          type: loki
+          access: proxy
+          url: http://loki:3100
+          isDefault: true
+          editable: true
+
+# Prometheus (disabled - we already have it)
+prometheus:
+  enabled: false
+
+---
+# Installation Commands:
+#
+# 1. Add Grafana Helm repository:
+#    helm repo add grafana https://grafana.github.io/helm-charts
+#    helm repo update
+#
+# 2. Create namespace:
+#    kubectl create namespace logging
+#
+# 3. Install Loki stack:
+#    helm install loki grafana/loki-stack \
+#      --namespace logging \
+#      --values 01-install-loki.yaml
+#
+# 4. Verify installation:
+#    kubectl get pods -n logging
+#
+# 5. Get Grafana password:
+#    kubectl get secret -n logging loki-grafana \
+#      -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+#
+# 6. Access Grafana:
+#    kubectl port-forward -n logging svc/loki-grafana 3000:80
+#    # Open http://localhost:3000
+#    # Username: admin
+#    # Password: (from step 5)
+

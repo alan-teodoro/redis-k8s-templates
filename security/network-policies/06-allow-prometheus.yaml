@@ -1,0 +1,58 @@
+---
+# Allow Prometheus Monitoring Network Policy
+#
+# Allows Prometheus to scrape metrics from Redis Enterprise.
+#
+# Usage:
+#   kubectl apply -f 06-allow-prometheus.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: network-policy
+spec:
+  # Apply to Redis Enterprise pods
+  podSelector:
+    matchLabels:
+      app: redis-enterprise
+  
+  policyTypes:
+    - Ingress
+  
+  ingress:
+    # Allow from Prometheus namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 8070  # Metrics exporter port
+
+---
+# Setup Instructions:
+#
+# 1. Verify Prometheus namespace and labels:
+#    kubectl get namespace monitoring --show-labels
+#    kubectl get pods -n monitoring -l app=prometheus --show-labels
+#
+# 2. If labels don't match, update the policy or add labels:
+#    kubectl label namespace monitoring kubernetes.io/metadata.name=monitoring
+#    kubectl label pod -n monitoring -l app.kubernetes.io/name=prometheus app=prometheus
+#
+# 3. Apply this policy:
+#    kubectl apply -f 06-allow-prometheus.yaml
+#
+# 4. Verify Prometheus can scrape metrics:
+#    # Check Prometheus targets page
+#    # Or test manually:
+#    kubectl run -it --rm curl --image=curlimages/curl --restart=Never -n monitoring -- \
+#      curl http://rec-0.rec.redis-enterprise.svc.cluster.local:8070/metrics
+

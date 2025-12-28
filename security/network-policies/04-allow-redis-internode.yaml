@@ -1,0 +1,76 @@
+---
+# Allow Redis Internode Communication Network Policy
+#
+# Allows Redis Enterprise nodes to communicate with each other.
+# Required for cluster formation, replication, and data synchronization.
+#
+# Usage:
+#   kubectl apply -f 04-allow-redis-internode.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-internode
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: network-policy
+spec:
+  # Apply to Redis Enterprise pods
+  podSelector:
+    matchLabels:
+      app: redis-enterprise
+  
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  ingress:
+    # Allow traffic from other Redis Enterprise pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app: redis-enterprise
+      ports:
+        # Redis Enterprise ports
+        - protocol: TCP
+          port: 8001  # Cluster Manager
+        - protocol: TCP
+          port: 8070  # Metrics exporter
+        - protocol: TCP
+          port: 8443  # API/UI
+        - protocol: TCP
+          port: 9443  # REST API
+        - protocol: TCP
+          port: 10000-20000  # Database ports range
+  
+  egress:
+    # Allow traffic to other Redis Enterprise pods
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis-enterprise
+      ports:
+        # Redis Enterprise ports
+        - protocol: TCP
+          port: 8001
+        - protocol: TCP
+          port: 8070
+        - protocol: TCP
+          port: 8443
+        - protocol: TCP
+          port: 9443
+        - protocol: TCP
+          port: 10000-20000
+
+---
+# Verification:
+#
+# Check Redis Enterprise cluster status:
+#   kubectl get rec -n redis-enterprise
+#
+# All nodes should be in "Running" state
+#
+# Check pod-to-pod connectivity:
+#   kubectl exec -it rec-0 -n redis-enterprise -- curl http://rec-1.rec.redis-enterprise.svc.cluster.local:8001
+

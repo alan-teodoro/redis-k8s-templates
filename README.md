@@ -18,121 +18,294 @@ This repository serves as a comprehensive reference for Redis Professional Servi
 ```
 redis-k8s-templates/
 │
-├── operator/                   # Redis Enterprise Operator installation & management
-├── deployments/                # Redis Enterprise deployment patterns
-│   └── redis-enterprise/
-│       ├── single-cluster/     # Standard single-cluster deployments
-│       ├── active-active/      # Multi-cluster Active-Active
-│       ├── active-passive/     # Disaster recovery configurations
-│       └── modules/            # Deployments with Redis modules
-│
-├── platforms/                  # Platform-specific configurations
+├── platforms/                  # Platform-specific cluster setup
 │   ├── eks/                    # AWS Elastic Kubernetes Service
 │   ├── aks/                    # Azure Kubernetes Service
 │   ├── gke/                    # Google Kubernetes Engine
-│   ├── openshift/              # Red Hat OpenShift
-│   └── vanilla/                # Generic Kubernetes
+│   └── openshift/              # Red Hat OpenShift
 │
-├── integrations/               # Third-party tool integrations
-│   ├── argocd/                 # GitOps with ArgoCD
-│   ├── vault/                  # HashiCorp Vault for secrets
-│   ├── cert-manager/           # Certificate management
-│   ├── ingress/                # Ingress controllers (NGINX, Traefik, etc.)
-│   └── service-mesh/           # Service mesh integrations
+├── deployments/                # Redis Enterprise deployment patterns
+│   ├── single-region/          # Standard single-region deployments
+│   └── active-active/          # Multi-region Active-Active (CRDB)
 │
-├── monitoring/                 # Monitoring & observability
-│   ├── prometheus/             # Prometheus integration
-│   ├── grafana/                # Grafana dashboards
-│   ├── datadog/                # Datadog integration
-│   └── newrelic/               # New Relic integration
+├── networking/                 # Networking solutions
+│   ├── gateway-api/            # Kubernetes Gateway API (NGINX Gateway Fabric)
+│   ├── ingress/                # Ingress controllers (NGINX, HAProxy, Istio)
+│   └── in-cluster/             # In-cluster networking
 │
 ├── security/                   # Security configurations
-│   ├── tls/                    # TLS/SSL certificates
-│   ├── rbac/                   # Role-based access control
-│   ├── network-policies/       # Network isolation
-│   ├── pod-security/           # Pod security policies/standards
-│   └── secrets-management/     # Secrets management solutions
+│   ├── tls-certificates/       # TLS/SSL certificates (Custom CA, cert-manager)
+│   ├── external-secrets/       # External Secrets Operator (AWS/Azure/GCP)
+│   ├── network-policies/       # Kubernetes Network Policies
+│   ├── pod-security/           # Pod Security Standards
+│   └── rbac/                   # Kubernetes RBAC
 │
-├── networking/                 # Networking configurations
-│   ├── services/               # Service types (ClusterIP, LoadBalancer, etc.)
-│   ├── ingress/                # Ingress configurations
-│   └── dns/                    # DNS configurations
+├── backup-restore/             # Backup & Restore
+│   ├── s3/                     # AWS S3 backups
+│   ├── gcs/                    # Google Cloud Storage backups
+│   └── azure-blob/             # Azure Blob Storage backups
 │
-├── storage/                    # Storage configurations
-│   ├── storage-classes/        # Platform-specific storage classes
-│   └── pvc-examples/           # PVC examples
+├── integrations/               # Third-party integrations
+│   ├── argocd/                 # GitOps with ArgoCD
+│   ├── vault/                  # HashiCorp Vault for secrets
+│   └── istio/                  # Istio Service Mesh
 │
-├── backup-restore/             # Backup and restore procedures
-├── disaster-recovery/          # DR strategies and runbooks
-├── testing/                    # Testing and validation tools
-├── automation/                 # Automation scripts and IaC
-├── examples/                   # End-to-end scenario examples
-└── docs/                       # Quick reference guides
+├── monitoring/                 # Monitoring stack
+│   ├── prometheus/             # Prometheus + ServiceMonitor
+│   └── grafana/                # Grafana dashboards
+│
+├── observability/              # Logging & Observability
+│   └── logging/                # Logging solutions
+│       └── loki/               # Grafana Loki + Promtail
+│
+├── operations/                 # Operational guides
+│   ├── ha-disaster-recovery/   # HA & DR strategies
+│   ├── troubleshooting/        # Troubleshooting guides
+│   └── capacity-planning/      # Capacity planning & sizing
+│
+└── best-practices/             # Best practices guide
 ```
+
+---
 
 ## 🚀 Quick Start
 
-### For OpenShift Users
-The most complete examples are currently in the OpenShift section:
-- **Single-region deployment**: [`platforms/openshift/single-region/`](platforms/openshift/single-region/)
-- **Active-Active deployment**: [`platforms/openshift/active-active/`](platforms/openshift/active-active/)
+### 1. Platform Setup
 
-Each includes:
-- Step-by-step deployment guide
-- All required YAML files
-- Connection and testing instructions
+Choose your platform and follow the setup guide:
 
-### For Other Platforms
-Content for EKS, AKS, GKE, and vanilla Kubernetes is being added progressively. Check the respective platform directories.
+| Platform | Guide | Description |
+|----------|-------|-------------|
+| **AWS EKS** | [platforms/eks/](platforms/eks/) | Complete EKS cluster setup with Redis Enterprise |
+| **Azure AKS** | [platforms/aks/](platforms/aks/) | AKS cluster setup (coming soon) |
+| **Google GKE** | [platforms/gke/](platforms/gke/) | GKE cluster setup (coming soon) |
+| **OpenShift** | [platforms/openshift/](platforms/openshift/) | OpenShift deployment examples |
 
-## 📚 Documentation
+### 2. Deployment Pattern
 
-- **[Deployment Patterns](docs/deployment-patterns.md)** - When to use which deployment pattern
-- **[Troubleshooting Guide](docs/troubleshooting.md)** - Common issues and solutions
-- **[Security Checklist](docs/security-checklist.md)** - Security best practices
-- **[Sizing Guide](docs/sizing-guide.md)** - Resource sizing recommendations
+Choose your deployment pattern:
 
-## 🎯 Common Use Cases
+| Pattern | Guide | Use Case |
+|---------|-------|----------|
+| **Single-Region** | [deployments/single-region/](deployments/single-region/) | Standard production deployment |
+| **Active-Active** | [deployments/active-active/](deployments/active-active/) | Multi-region, geo-distributed |
 
-| Use Case | Location | Description |
-|----------|----------|-------------|
-| Single-cluster deployment | `deployments/redis-enterprise/single-cluster/` | Standard Redis Enterprise cluster |
-| Active-Active geo-distribution | `deployments/redis-enterprise/active-active/` | Multi-region with CRDT replication |
-| OpenShift deployment | `platforms/openshift/` | Complete OpenShift examples |
-| ArgoCD GitOps | `integrations/argocd/` | GitOps deployment patterns |
-| Vault secrets integration | `integrations/vault/` | Secrets management with Vault |
-| Prometheus monitoring | `monitoring/prometheus/` | Metrics and alerting |
+### 3. Essential Components
+
+Configure essential components for production:
+
+| Component | Guide | Priority |
+|-----------|-------|----------|
+| **Backup & Restore** | [backup-restore/](backup-restore/) | 🔴 CRITICAL |
+| **Security** | [security/](security/) | 🔴 CRITICAL |
+| **Monitoring** | [monitoring/](monitoring/) | 🟡 IMPORTANT |
+| **Networking** | [networking/](networking/) | 🟡 IMPORTANT |
+| **Logging** | [observability/logging/](observability/logging/) | 🟢 RECOMMENDED |
+
+---
+
+## 📚 Documentation by Topic
+
+### 🔐 Security
+
+| Topic | Guide | Description |
+|-------|-------|-------------|
+| **TLS Certificates** | [security/tls-certificates/](security/tls-certificates/) | Custom CA, cert-manager integration |
+| **External Secrets** | [security/external-secrets/](security/external-secrets/) | AWS/Azure/GCP secret management |
+| **Network Policies** | [security/network-policies/](security/network-policies/) | Zero-trust network security |
+| **Pod Security** | [security/pod-security/](security/pod-security/) | Pod Security Standards |
+| **RBAC** | [security/rbac/](security/rbac/) | Kubernetes RBAC configuration |
+
+### 💾 Backup & Disaster Recovery
+
+| Topic | Guide | Description |
+|-------|-------|-------------|
+| **S3 Backups** | [backup-restore/s3/](backup-restore/s3/) | AWS S3 backup configuration |
+| **GCS Backups** | [backup-restore/gcs/](backup-restore/gcs/) | Google Cloud Storage backups |
+| **Azure Backups** | [backup-restore/azure-blob/](backup-restore/azure-blob/) | Azure Blob Storage backups |
+| **HA & DR** | [operations/ha-disaster-recovery/](operations/ha-disaster-recovery/) | High availability and DR strategies |
+
+### 🌐 Networking
+
+| Topic | Guide | Description |
+|-------|-------|-------------|
+| **Gateway API** | [networking/gateway-api/](networking/gateway-api/) | NGINX Gateway Fabric |
+| **NGINX Ingress** | [networking/ingress/nginx/](networking/ingress/nginx/) | NGINX Ingress Controller |
+| **HAProxy Ingress** | [networking/ingress/haproxy/](networking/ingress/haproxy/) | HAProxy Ingress Controller |
+| **Istio** | [integrations/istio/](integrations/istio/) | Istio Service Mesh |
+
+### 📊 Monitoring & Observability
+
+| Topic | Guide | Description |
+|-------|-------|-------------|
+| **Prometheus** | [monitoring/prometheus/](monitoring/prometheus/) | Metrics collection and alerting |
+| **Grafana** | [monitoring/grafana/](monitoring/grafana/) | Dashboards and visualization |
+| **Loki** | [observability/logging/loki/](observability/logging/loki/) | Log aggregation and querying |
+
+### � Operations
+
+| Topic | Guide | Description |
+|-------|-------|-------------|
+| **Troubleshooting** | [operations/troubleshooting/](operations/troubleshooting/) | Common issues and solutions |
+| **Capacity Planning** | [operations/capacity-planning/](operations/capacity-planning/) | Resource sizing and planning |
+| **Best Practices** | [best-practices/](best-practices/) | Production best practices |
+
+### 🔗 Integrations
+
+| Topic | Guide | Description |
+|-------|-------|-------------|
+| **ArgoCD** | [integrations/argocd/](integrations/argocd/) | GitOps deployment |
+| **HashiCorp Vault** | [integrations/vault/](integrations/vault/) | Secrets management |
+
+---
+
+## 🎯 Common Scenarios
+
+### Scenario 1: New Production Deployment on AWS
+
+1. ✅ [Setup EKS cluster](platforms/eks/)
+2. ✅ [Deploy single-region Redis Enterprise](deployments/single-region/)
+3. ✅ [Configure S3 backups](backup-restore/s3/)
+4. ✅ [Enable TLS with cert-manager](security/tls-certificates/cert-manager/)
+5. ✅ [Setup External Secrets Operator](security/external-secrets/aws/)
+6. ✅ [Configure Network Policies](security/network-policies/)
+7. ✅ [Setup Prometheus monitoring](monitoring/prometheus/)
+8. ✅ [Configure Loki logging](observability/logging/loki/)
+
+### Scenario 2: Multi-Region Active-Active
+
+1. ✅ [Setup clusters in multiple regions](platforms/eks/)
+2. ✅ [Deploy Active-Active CRDB](deployments/active-active/)
+3. ✅ [Configure cross-region backups](backup-restore/)
+4. ✅ [Setup monitoring in each region](monitoring/)
+5. ✅ [Test failover procedures](operations/ha-disaster-recovery/)
+
+### Scenario 3: Security Hardening
+
+1. ✅ [Enable TLS everywhere](security/tls-certificates/)
+2. ✅ [Configure External Secrets](security/external-secrets/)
+3. ✅ [Apply Network Policies](security/network-policies/)
+4. ✅ [Enable Pod Security Standards](security/pod-security/)
+5. ✅ [Configure RBAC](security/rbac/)
+6. ✅ [Review best practices](best-practices/)
+
+---
 
 ## 🔧 Prerequisites
 
 - Kubernetes cluster (1.23+) or OpenShift (4.10+)
 - kubectl or oc CLI configured
 - Cluster admin access (for operator installation)
-- Sufficient resources (see sizing guide)
+- Sufficient resources (see [Capacity Planning](operations/capacity-planning/))
+
+---
 
 ## 📖 How to Use This Repository
 
-1. **Find your platform**: Navigate to `platforms/<your-platform>/`
-2. **Choose deployment pattern**: Check `deployments/redis-enterprise/<pattern>/`
-3. **Review integrations**: Add monitoring, secrets management, etc. from `integrations/`
-4. **Follow step-by-step guides**: Each section has README.md with deployment steps
-5. **Test and validate**: Use tools from `testing/` directory
+### For Professional Services Teams
+
+1. **Pre-engagement**: Review [Best Practices](best-practices/) and [Capacity Planning](operations/capacity-planning/)
+2. **Platform setup**: Follow platform-specific guides in [platforms/](platforms/)
+3. **Deployment**: Choose pattern from [deployments/](deployments/)
+4. **Security**: Implement security controls from [security/](security/)
+5. **Operations**: Setup monitoring, logging, and backups
+6. **Handoff**: Provide [Troubleshooting](operations/troubleshooting/) and [Operations](operations/) guides to customer
+
+### For Customers
+
+1. **Start here**: [Quick Start](#-quick-start) section above
+2. **Follow scenarios**: Choose a scenario that matches your use case
+3. **Reference documentation**: Each component has detailed README with step-by-step instructions
+4. **Get help**: Use [Troubleshooting Guide](operations/troubleshooting/) for common issues
+
+---
+
+## ✅ What's Included
+
+This repository provides **production-ready, tested configurations** for:
+
+### ✅ Complete Platform Setup
+- AWS EKS cluster with all prerequisites
+- Redis Enterprise Operator installation
+- Cluster and database deployment
+
+### ✅ Enterprise Security
+- TLS/SSL certificates (Custom CA + cert-manager)
+- External Secrets Operator (AWS/Azure/GCP)
+- Network Policies (zero-trust)
+- Pod Security Standards
+- Kubernetes RBAC
+
+### ✅ Backup & Disaster Recovery
+- Automated backups to S3/GCS/Azure
+- High Availability configuration
+- Disaster Recovery strategies
+- Restore procedures
+
+### ✅ Networking Solutions
+- Gateway API (NGINX Gateway Fabric)
+- Ingress Controllers (NGINX, HAProxy)
+- Service Mesh (Istio)
+- In-cluster networking
+
+### ✅ Monitoring & Observability
+- Prometheus metrics collection
+- Grafana dashboards
+- Loki log aggregation
+- Alert rules
+
+### ✅ Operations & Best Practices
+- Troubleshooting guides
+- Capacity planning and sizing
+- Production best practices
+- Common scenarios and runbooks
+
+---
+
+## 🎓 Redis Enterprise 8.0 Features
+
+This repository is designed for **Redis Enterprise 8.0**, which includes:
+
+- ✅ **Built-in Modules**: All modules (JSON, Search/Query Engine, TimeSeries, Bloom, etc.) are now native - no separate installation needed
+- ✅ **Redis Query Engine**: Vector search for GenAI/RAG applications
+- ✅ **Simplified Management**: No more module_args configuration
+- ✅ **Enhanced Performance**: Improved query performance and scalability
+
+---
 
 ## 🤝 Contributing
 
-This is a living reference repository. When adding new content:
-- Follow the existing documentation style (see OpenShift examples)
+This is a living reference repository maintained by Redis Professional Services team.
+
+**Guidelines:**
+- Follow existing documentation style
 - Include step-by-step deployment instructions
 - Test all YAML files before committing
-- Keep documentation concise and reference-focused
-- No conceptual explanations - focus on "how-to"
+- Keep documentation concise and practical
+- Focus on "how-to" rather than conceptual explanations
+
+---
 
 ## 📞 Support
 
-For Redis Professional Services team and customers:
-- Internal: Contact Redis PS team
-- Customers: Reach out to your Redis account team
+**For Redis Professional Services Team:**
+- Use this repository as reference for customer engagements
+- Contribute improvements and new scenarios
+- Share feedback and suggestions
+
+**For Customers:**
+- Contact your Redis account team
+- Reference this repository during engagements
+- Follow guides for production deployments
+
+---
 
 ## 📄 License
 
 Internal Redis Professional Services resource.
+
+---
+
+**Last Updated**: 2025-12-27
+**Redis Enterprise Version**: 8.0.6-8
+**Kubernetes Version**: 1.23+

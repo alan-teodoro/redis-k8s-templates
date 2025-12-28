@@ -1,0 +1,200 @@
+---
+# Active-Active Disaster Recovery Configuration
+#
+# Architecture:
+# - Multiple clusters in different regions (all active)
+# - CRDB (Conflict-free Replicated Database) for bi-directional replication
+# - Automatic conflict resolution
+# - Near-zero RPO, sub-second RTO
+#
+# RTO: < 1 minute (automatic failover)
+# RPO: Near-zero (continuous replication)
+#
+# Note: For complete Active-Active setup, see deployments/active-active/
+
+---
+# Cluster 1 - Region A (e.g., us-east-1)
+---
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-us-east-1
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app
+              operator: In
+              values:
+                - redis-enterprise
+        topologyKey: kubernetes.io/hostname
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4"
+      memory: 16Gi
+    requests:
+      cpu: "4"
+      memory: 16Gi
+  
+  persistentSpec:
+    enabled: true
+    volumeSize: 100Gi
+
+---
+# Cluster 2 - Region B (e.g., us-west-2)
+---
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-us-west-2
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app
+              operator: In
+              values:
+                - redis-enterprise
+        topologyKey: kubernetes.io/hostname
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4"
+      memory: 16Gi
+    requests:
+      cpu: "4"
+      memory: 16Gi
+  
+  persistentSpec:
+    enabled: true
+    volumeSize: 100Gi
+
+---
+# Cluster 3 - Region C (e.g., eu-west-1)
+---
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-eu-west-1
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+  
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app
+              operator: In
+              values:
+                - redis-enterprise
+        topologyKey: kubernetes.io/hostname
+  
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "4"
+      memory: 16Gi
+    requests:
+      cpu: "4"
+      memory: 16Gi
+  
+  persistentSpec:
+    enabled: true
+    volumeSize: 100Gi
+
+---
+# Active-Active Database (CRDB)
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseActiveActiveDatabase
+metadata:
+  name: redis-aa-db
+  namespace: redis-enterprise
+spec:
+  # Global database configuration
+  globalConfigurations:
+    memorySize: 4GB
+    shardCount: 2
+    replication: true
+    
+  # Participating clusters
+  participatingClusters:
+    - name: rec-us-east-1
+    - name: rec-us-west-2
+    - name: rec-eu-west-1
+  
+  # Database secret
+  databaseSecretName: redis-aa-credentials
+
+---
+# Disaster Recovery Scenarios
+---
+
+# Scenario 1: One Region Fails
+# - Traffic automatically routes to healthy regions
+# - No data loss (continuous replication)
+# - No manual intervention required
+# - RTO: < 1 minute (DNS/LB failover)
+# - RPO: Near-zero
+
+# Scenario 2: Region Comes Back Online
+# - Automatic catch-up replication
+# - Conflict resolution (CRDT)
+# - No manual intervention required
+
+# Scenario 3: Complete Region Loss
+# - Remaining regions continue serving traffic
+# - When region is rebuilt, re-add to CRDB
+# - Automatic full sync
+
+---
+# Monitoring Active-Active Health
+---
+
+# Check CRDB status
+# kubectl exec -it rec-us-east-1-0 -n redis-enterprise -- \
+#   rladmin status databases extra crdt_syncer_status
+
+# Check replication lag
+# kubectl exec -it rec-us-east-1-0 -n redis-enterprise -- \
+#   rladmin status databases extra crdt_replication_lag
+
+# Check participating clusters
+# kubectl exec -it rec-us-east-1-0 -n redis-enterprise -- \
+#   rladmin status databases extra crdt_participating_clusters
+
+---
+# Testing Disaster Recovery
+---
+
+# 1. Simulate region failure (block traffic to one cluster)
+# kubectl scale deployment rec-us-east-1 --replicas=0 -n redis-enterprise
+
+# 2. Verify traffic continues on other regions
+# redis-cli -h redis-aa-db-us-west-2.redis-enterprise.svc.cluster.local -p 12000 PING
+
+# 3. Write data to healthy region
+# redis-cli -h redis-aa-db-us-west-2.redis-enterprise.svc.cluster.local -p 12000 SET test-key "disaster-recovery-test"
+
+# 4. Restore failed region
+# kubectl scale deployment rec-us-east-1 --replicas=3 -n redis-enterprise
+
+# 5. Verify data replicated to restored region
+# redis-cli -h redis-aa-db-us-east-1.redis-enterprise.svc.cluster.local -p 12000 GET test-key
+
+---
+# Reference
+---
+
+# For complete Active-Active setup guide, see:
+# deployments/active-active/README.md
+

@@ -1,0 +1,130 @@
+---
+# Developer RBAC
+#
+# ServiceAccount, Role, and RoleBinding for developers.
+# Allows managing databases but not cluster configuration.
+#
+# Usage:
+#   kubectl apply -f 03-developer-rbac.yaml
+
+---
+# ServiceAccount for Developers
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-developer
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: developer
+
+---
+# Role for Developers
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: redis-developer
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: developer
+rules:
+  # Redis Enterprise Databases (full access)
+  - apiGroups: ["app.redislabs.com"]
+    resources:
+      - redisenterprisedatabases
+      - redisenterprisedatabases/status
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  
+  # Redis Enterprise Cluster (read-only)
+  - apiGroups: ["app.redislabs.com"]
+    resources:
+      - redisenterpriseclusters
+      - redisenterpriseclusters/status
+    verbs: ["get", "list", "watch"]
+  
+  # Pods (read-only)
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  
+  # Services (read-only)
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  
+  # ConfigMaps (read-only)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  
+  # Events (read-only)
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  
+  # Secrets (NO ACCESS - developers should not see secrets)
+  # Commented out intentionally
+
+---
+# RoleBinding for Developers
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redis-developer
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: developer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: redis-developer
+subjects:
+  - kind: ServiceAccount
+    name: redis-developer
+    namespace: redis-enterprise
+
+---
+# Verification:
+#
+# 1. Test database permissions (should succeed):
+#    kubectl auth can-i create redb --as=system:serviceaccount:redis-enterprise:redis-developer -n redis-enterprise
+#    kubectl auth can-i delete redb --as=system:serviceaccount:redis-enterprise:redis-developer -n redis-enterprise
+#
+# 2. Test cluster permissions (should fail for write):
+#    kubectl auth can-i get rec --as=system:serviceaccount:redis-enterprise:redis-developer -n redis-enterprise  # Should succeed
+#    kubectl auth can-i delete rec --as=system:serviceaccount:redis-enterprise:redis-developer -n redis-enterprise  # Should fail
+#
+# 3. Test secret permissions (should fail):
+#    kubectl auth can-i get secrets --as=system:serviceaccount:redis-enterprise:redis-developer -n redis-enterprise
+#
+# 4. List all permissions:
+#    kubectl auth can-i --list --as=system:serviceaccount:redis-enterprise:redis-developer -n redis-enterprise
+
+---
+# Usage with User Authentication:
+#
+# To bind this role to a user (not ServiceAccount):
+#
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: RoleBinding
+# metadata:
+#   name: developer-john
+#   namespace: redis-enterprise
+# roleRef:
+#   apiGroup: rbac.authorization.k8s.io
+#   kind: Role
+#   name: redis-developer
+# subjects:
+#   - kind: User
+#     name: john@example.com
+#     apiGroup: rbac.authorization.k8s.io
+#
+# Or bind to a group:
+#
+# subjects:
+#   - kind: Group
+#     name: developers
+#     apiGroup: rbac.authorization.k8s.io
+

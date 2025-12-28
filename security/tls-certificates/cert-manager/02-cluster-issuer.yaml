@@ -1,0 +1,236 @@
+---
+# ClusterIssuer for cert-manager
+#
+# ClusterIssuer is a cluster-wide resource that represents a certificate authority
+# that can sign certificates. It's similar to Issuer but works across all namespaces.
+#
+# Supported Issuers:
+# 1. SelfSigned - For testing/development
+# 2. CA - For existing Certificate Authority
+# 3. Vault - For HashiCorp Vault integration
+# 4. ACME (Let's Encrypt) - For public-facing endpoints
+#
+# Usage:
+#   kubectl apply -f 02-cluster-issuer.yaml
+
+---
+# 1. Self-Signed Issuer (Testing/Development)
+#
+# Use Case: Testing, development, internal environments
+# Pros: No external dependencies, fast issuance
+# Cons: Not trusted by browsers/clients, manual trust configuration required
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+  labels:
+    app: cert-manager
+spec:
+  selfSigned: {}
+
+---
+# 2. CA Issuer (Existing Certificate Authority)
+#
+# Use Case: Existing CA infrastructure
+# Pros: Use existing CA, trusted within organization
+# Cons: Manual CA management required
+#
+# Prerequisites:
+# 1. Create secret with CA certificate and key:
+#    kubectl create secret tls ca-key-pair \
+#      --cert=ca.crt \
+#      --key=ca.key \
+#      -n cert-manager
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: ca-issuer
+  labels:
+    app: cert-manager
+spec:
+  ca:
+    secretName: ca-key-pair  # Secret containing CA cert and key
+
+---
+# 3. HashiCorp Vault Issuer (Enterprise PKI)
+#
+# Use Case: Enterprise environments with Vault
+# Pros: Integration with enterprise PKI, centralized management, audit logging
+# Cons: Requires Vault infrastructure
+#
+# Prerequisites:
+# 1. Vault server running and accessible
+# 2. PKI secrets engine enabled in Vault
+# 3. Vault authentication configured (Kubernetes auth method)
+#
+# Vault Setup:
+#   # Enable PKI secrets engine
+#   vault secrets enable pki
+#   
+#   # Configure PKI
+#   vault secrets tune -max-lease-ttl=87600h pki
+#   
+#   # Generate root CA
+#   vault write pki/root/generate/internal \
+#     common_name="Redis Enterprise CA" \
+#     ttl=87600h
+#   
+#   # Configure PKI role
+#   vault write pki/roles/redis-enterprise \
+#     allowed_domains="redis.example.com,redis-enterprise.svc.cluster.local" \
+#     allow_subdomains=true \
+#     allow_glob_domains=true \
+#     max_ttl=2160h
+#   
+#   # Enable Kubernetes auth
+#   vault auth enable kubernetes
+#   
+#   # Configure Kubernetes auth
+#   vault write auth/kubernetes/config \
+#     kubernetes_host="https://kubernetes.default.svc:443"
+#   
+#   # Create policy
+#   vault policy write cert-manager - <<EOF
+#   path "pki/sign/redis-enterprise" {
+#     capabilities = ["create", "update"]
+#   }
+#   EOF
+#   
+#   # Create role
+#   vault write auth/kubernetes/role/cert-manager \
+#     bound_service_account_names=cert-manager \
+#     bound_service_account_namespaces=cert-manager \
+#     policies=cert-manager \
+#     ttl=1h
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: vault-issuer
+  labels:
+    app: cert-manager
+spec:
+  vault:
+    # Vault server URL
+    server: https://vault.vault.svc.cluster.local:8200
+    
+    # Vault PKI path
+    path: pki/sign/redis-enterprise
+    
+    # Vault CA bundle (optional)
+    # caBundle: <base64-encoded-ca-cert>
+    
+    # Kubernetes authentication
+    auth:
+      kubernetes:
+        role: cert-manager
+        mountPath: /v1/auth/kubernetes
+        secretRef:
+          name: cert-manager-vault-token
+          key: token
+
+---
+# 4. ACME Issuer (Let's Encrypt) - Production
+#
+# Use Case: Public-facing endpoints with valid domain names
+# Pros: Free certificates, trusted by all browsers/clients, automatic renewal
+# Cons: Requires public DNS, rate limits, domain validation required
+#
+# Prerequisites:
+# 1. Public domain name
+# 2. DNS configured to point to your cluster
+# 3. Ingress controller with HTTP01 or DNS01 challenge support
+#
+# Let's Encrypt Environments:
+# - Production: https://acme-v02.api.letsencrypt.org/directory
+# - Staging: https://acme-staging-v02.api.letsencrypt.org/directory (for testing)
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    app: cert-manager
+spec:
+  acme:
+    # Let's Encrypt production server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    
+    # Email for certificate expiry notifications
+    email: admin@redis.com  # Change to your email
+    
+    # Secret to store ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    
+    # HTTP01 challenge (requires Ingress)
+    solvers:
+      - http01:
+          ingress:
+            class: nginx  # Change to your ingress class
+
+---
+# 5. ACME Issuer (Let's Encrypt) - Staging (for testing)
+#
+# Use this for testing to avoid hitting Let's Encrypt rate limits.
+# Staging certificates are not trusted by browsers.
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    app: cert-manager
+spec:
+  acme:
+    # Let's Encrypt staging server
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    
+    # Email for certificate expiry notifications
+    email: admin@redis.com  # Change to your email
+    
+    # Secret to store ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    
+    # HTTP01 challenge (requires Ingress)
+    solvers:
+      - http01:
+          ingress:
+            class: nginx  # Change to your ingress class
+
+---
+# Verification Commands:
+#
+# 1. Check ClusterIssuer status:
+#    kubectl get clusterissuer
+#
+# 2. Describe ClusterIssuer:
+#    kubectl describe clusterissuer selfsigned-issuer
+#
+# 3. Check ClusterIssuer is ready:
+#    kubectl get clusterissuer selfsigned-issuer -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+#
+# 4. Test ClusterIssuer with a certificate:
+#    kubectl apply -f - <<EOF
+#    apiVersion: cert-manager.io/v1
+#    kind: Certificate
+#    metadata:
+#      name: test-cert
+#      namespace: default
+#    spec:
+#      secretName: test-cert-secret
+#      issuerRef:
+#        name: selfsigned-issuer
+#        kind: ClusterIssuer
+#      commonName: test.example.com
+#      dnsNames:
+#        - test.example.com
+#    EOF
+#
+#    # Check certificate status:
+#    kubectl get certificate test-cert -n default
+#    kubectl describe certificate test-cert -n default
+
