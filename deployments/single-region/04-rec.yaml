@@ -72,8 +72,8 @@ spec:
   rackAwarenessNodeLabel: topology.kubernetes.io/zone
   
   # Username for the cluster admin
-  # Default password will be auto-generated and stored in a secret
-  username: demo@redis.com
+  # Password is stored in the secret 'rec' (01-rec-admin-secret.yaml)
+  username: admin@redis.com
   
   # UI service type (ClusterIP for internal access only)
   # Change to LoadBalancer for external access

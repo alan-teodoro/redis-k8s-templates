@@ -64,6 +64,11 @@ When using **REDB (RedisEnterpriseDatabase) CRD** to manage databases:
 
 **⚠️ IMPORTANT:** Change passwords before production deployment!
 
+**⚠️ CRITICAL:** The username in `04-rec.yaml` (line 76) MUST match the username in `01-rec-admin-secret.yaml`.
+- Default: `admin@redis.com`
+- **Username CANNOT be changed after REC creation!**
+- If you need a different username, change BOTH files BEFORE first deployment.
+
 ---
 
 ## Deployment
@@ -83,20 +88,33 @@ kubectl apply -f 03-rbac-rack-awareness.yaml
 kubectl apply -f 04-rec.yaml
 
 # 5. Wait for cluster to be ready (5-10 minutes)
-kubectl wait --for=condition=Ready rec/rec -n redis-enterprise --timeout=600s
+# Note: The cluster may show STATE=Running before condition=Ready
+# Check that STATE=Running and SPEC STATUS=Valid
+kubectl get rec -n redis-enterprise -w
+# Press Ctrl+C when STATE=Running and SPEC STATUS=Valid
 
-# 6. Verify cluster
+# Alternative: Wait with timeout (may timeout but cluster still becomes ready)
+# kubectl wait --for=condition=Ready rec/rec -n redis-enterprise --timeout=600s
+
+# 6. Verify cluster is running
 kubectl get rec -n redis-enterprise
 kubectl get pods -n redis-enterprise
 
-# 7. Create database (port 12000)
+# Expected output:
+# REC: STATE=Running, SPEC STATUS=Valid
+# Pods: All rec-* pods should be 2/2 Ready
+
+# 7. Create database (port 12000, TLS enabled)
 kubectl apply -f 05-redb.yaml
 
-# 8. Wait for database to be ready
-kubectl wait --for=condition=Active redb/test-db -n redis-enterprise --timeout=300s
+# 8. Wait for database to be active (1-2 minutes)
+kubectl wait --for=jsonpath='{.status.status}'=active redb/test-db -n redis-enterprise --timeout=180s
 
 # 9. Verify database
 kubectl get redb test-db -n redis-enterprise
+
+# Expected output:
+# STATUS=active, SPEC STATUS=Valid, PORT=12000
 ```
 
 ---
@@ -164,23 +182,40 @@ DB_PASSWORD=$(kubectl get secret redb-secret -n redis-enterprise -o jsonpath='{.
 # Or use default: RedisAdmin123!
 ```
 
-### Test Connection (With TLS - Recommended)
+### Test Connection
+
+**Note:** The database has TLS enabled by default. You MUST use `--tls --insecure` flags.
 
 ```bash
-kubectl run -it --rm redis-test --image=redis:latest --restart=Never -- \
-  redis-cli -h test-db.redis-enterprise.svc.cluster.local -p 12000 --tls --insecure -a RedisAdmin123! PING
+# Create a test pod
+kubectl run redis-cli-test -n redis-enterprise --image=redis:latest --restart=Never --command -- sleep 3600
+
+# Wait for pod to be ready
+kubectl wait --for=condition=Ready pod/redis-cli-test -n redis-enterprise --timeout=60s
+
+# Test PING
+kubectl exec -n redis-enterprise redis-cli-test -- \
+  redis-cli -h test-db -p 12000 -a RedisAdmin123! --tls --insecure PING
+
+# Test SET/GET
+kubectl exec -n redis-enterprise redis-cli-test -- \
+  redis-cli -h test-db -p 12000 -a RedisAdmin123! --tls --insecure SET mykey "Hello Redis"
+
+kubectl exec -n redis-enterprise redis-cli-test -- \
+  redis-cli -h test-db -p 12000 -a RedisAdmin123! --tls --insecure GET mykey
+
+# Cleanup test pod
+kubectl delete pod redis-cli-test -n redis-enterprise
 ```
 
-**Expected:** `PONG`
+**Expected Output:**
+- PING: `PONG`
+- SET: `OK`
+- GET: `Hello Redis`
 
-### Test Connection (Internal - No TLS)
-
-```bash
-kubectl run -it --rm redis-test --image=redis:latest --restart=Never -- \
-  redis-cli -h test-db.redis-enterprise.svc.cluster.local -p 12000 -a RedisAdmin123! PING
-```
-
-**Expected:** `PONG`
+**Troubleshooting:**
+- If you get "I/O error" or "Server closed the connection", you forgot the `--tls --insecure` flags
+- If you get "WRONGPASS", check the password in the secret: `kubectl get secret redb-secret -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d`
 
 ---
 
