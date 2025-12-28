@@ -1,16 +1,20 @@
 # StorageClass for Redis on Flash - AWS EBS gp3
 #
-# Este StorageClass usa AWS EBS gp3 volumes para Redis on Flash.
-# gp3 oferece melhor performance e custo vs. gp2.
+# ⚠️ WARNING: EBS volumes (gp3, io2) are NOT recommended for Redis on Flash
+# Redis on Flash requires NVMe local SSD for optimal performance
+# Use i3, i3en, or i4i instances with local NVMe SSD instead
 #
-# Características:
+# This StorageClass is provided for reference only
+# For production, use local NVMe SSD (see redis-flash-local-ssd below)
+#
+# Characteristics:
 #   - Provisioner: AWS EBS CSI Driver
 #   - Type: gp3 (General Purpose SSD v3)
-#   - IOPS: 16000 (configurável)
-#   - Throughput: 1000 MB/s (configurável)
+#   - IOPS: 16000 (configurable)
+#   - Throughput: 1000 MB/s (configurable)
 #   - Reclaim Policy: Delete
 #
-# Uso:
+# Usage:
 #   kubectl apply -f 01-storage-class-aws.yaml
 
 ---
@@ -24,33 +28,34 @@ metadata:
 provisioner: ebs.csi.aws.com
 parameters:
   type: gp3
-  
-  # IOPS provisionados (3000-16000)
-  # Recomendado: 16000 para máxima performance
+
+  # Provisioned IOPS (3000-16000)
+  # Recommended: 16000 for maximum performance
   iops: "16000"
-  
-  # Throughput em MB/s (125-1000)
-  # Recomendado: 1000 para máxima performance
+
+  # Throughput in MB/s (125-1000)
+  # Recommended: 1000 for maximum performance
   throughput: "1000"
-  
+
   # Filesystem type
   fsType: ext4
-  
-  # Encryption habilitado
+
+  # Encryption enabled
   encrypted: "true"
 
-# Reclaim policy: Delete (volumes deletados quando PVC é deletado)
+# Reclaim policy: Delete (volumes deleted when PVC is deleted)
 reclaimPolicy: Delete
 
 # Volume binding mode: WaitForFirstConsumer
-# Garante que volume é criado na mesma AZ do pod
+# Ensures volume is created in same AZ as pod
 volumeBindingMode: WaitForFirstConsumer
 
-# Permite expansão de volumes
+# Allow volume expansion
 allowVolumeExpansion: true
 
 ---
-# StorageClass alternativo com io2 (para workloads críticos)
+# Alternative StorageClass with io2 (for critical workloads)
+# ⚠️ WARNING: Still not recommended for Redis on Flash - use local NVMe SSD
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -61,7 +66,7 @@ metadata:
 provisioner: ebs.csi.aws.com
 parameters:
   type: io2
-  iops: "64000"  # io2 suporta até 64000 IOPS
+  iops: "64000"  # io2 supports up to 64000 IOPS
   fsType: ext4
   encrypted: "true"
 reclaimPolicy: Delete
@@ -69,9 +74,9 @@ volumeBindingMode: WaitForFirstConsumer
 allowVolumeExpansion: true
 
 ---
-# StorageClass para instance store (SSD local - máxima performance)
-# Requer nodes i3, i3en, i4i com SSD local
-# ATENÇÃO: Dados são perdidos se node falhar (use com replicação)
+# StorageClass for instance store (local SSD - RECOMMENDED for Redis on Flash)
+# Requires i3, i3en, i4i nodes with local SSD
+# ⚠️ WARNING: Data is lost if node fails (use with replication)
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -83,6 +88,6 @@ provisioner: kubernetes.io/no-provisioner
 volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Delete
 
-# Para usar local SSD, você precisa criar LocalPersistentVolumes manualmente
-# ou usar um provisioner como local-volume-provisioner
+# To use local SSD, you need to create LocalPersistentVolumes manually
+# or use a provisioner like local-volume-provisioner
 

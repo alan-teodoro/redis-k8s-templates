@@ -1,15 +1,18 @@
 # Redis Enterprise Cluster with Redis on Flash
 #
-# REC configurado para suportar Redis on Flash com SSD storage.
+# ⚠️ WARNING: This configuration requires NVMe local SSD storage
+# NOT recommended for testing on standard EKS with EBS volumes
 #
-# Características:
+# REC configured to support Redis on Flash with SSD storage.
+#
+# Characteristics:
 #   - 3 nodes
-#   - 16GB RAM por node
-#   - 500GB Flash/SSD por node
+#   - 16GB RAM per node
+#   - 500GB Flash/SSD per node
 #   - RocksDB storage engine
-#   - Replicação habilitada
+#   - Replication enabled
 #
-# Uso:
+# Usage:
 #   kubectl apply -f 02-rec-with-flash.yaml
 
 ---
@@ -22,51 +25,52 @@ metadata:
     app: redis-enterprise
     storage-type: flash
 spec:
-  # Número de nodes no cluster
+  # Number of nodes in cluster
   nodes: 3
 
-  # Recursos por node
+  # Resources per node
   redisEnterpriseNodeResources:
     limits:
       cpu: "8000m"
-      memory: 20Gi  # 16GB para Redis + 4GB para OS
+      memory: 20Gi  # 16GB for Redis + 4GB for OS
     requests:
       cpu: "4000m"
       memory: 20Gi
 
-  # Configuração de Redis on Flash
+  # Redis on Flash configuration
   redisOnFlashSpec:
-    # Habilita Redis on Flash
+    # Enable Redis on Flash
     enabled: true
-    
-    # Storage engine: rocksdb (recomendado) ou speedb
+
+    # Storage engine: rocksdb (recommended) or speedb
     flashStorageEngine: rocksdb
-    
-    # Tamanho do Flash/SSD por node
-    # Este valor define o PVC size para cada pod
+
+    # Flash/SSD size per node
+    # This value defines the PVC size for each pod
     flashDiskSize: 500Gi
 
-  # Configuração de persistência para Flash volumes
+  # Persistence configuration for Flash volumes
   persistentSpec:
     enabled: true
-    
-    # StorageClass para Flash volumes
-    # Escolha o apropriado para seu cloud provider:
-    # - redis-flash-gp3 (AWS)
-    # - redis-flash-premium-ssd (Azure)
-    # - redis-flash-pd-ssd (GCP)
+
+    # StorageClass for Flash volumes
+    # Choose appropriate for your cloud provider:
+    # - redis-flash-gp3 (AWS - NOT recommended, use local NVMe)
+    # - redis-flash-premium-ssd (Azure - NOT recommended, use local NVMe)
+    # - redis-flash-pd-ssd (GCP - NOT recommended, use local NVMe)
+    # - redis-flash-local-ssd (Recommended - local NVMe SSD)
     storageClassName: redis-flash-gp3
-    
+
     # Volume mode
     volumeMode: Filesystem
 
-  # Configuração de UI
+  # UI configuration
   uiServiceType: ClusterIP
-  
-  # Credenciais de admin
+
+  # Admin credentials
   username: admin@redis.com
-  
-  # Licença (opcional - usar trial se não tiver licença)
+
+  # License (optional - use trial if no license)
   # licenseSecretName: redis-enterprise-license
 
   # Services rigger
@@ -74,12 +78,12 @@ spec:
     databaseServiceType: ClusterIP
     serviceNaming: bdb_name
 
-  # Rack awareness para HA (opcional)
+  # Rack awareness for HA (optional)
   # rackAwarenessNodeLabel: topology.kubernetes.io/zone
 
 ---
-# PersistentVolumeClaim template (criado automaticamente pelo operator)
-# Este é apenas um exemplo do que será criado
+# PersistentVolumeClaim template (created automatically by operator)
+# This is just an example of what will be created
 # apiVersion: v1
 # kind: PersistentVolumeClaim
 # metadata:

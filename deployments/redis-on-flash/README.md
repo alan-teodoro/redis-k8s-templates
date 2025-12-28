@@ -1,244 +1,172 @@
 # Redis on Flash (RoF)
 
-Deploy Redis Enterprise with Redis on Flash para otimizar custos em datasets grandes usando tiering de memória RAM + SSD.
+⚠️ **IMPORTANT LIMITATION - REQUIRES SPECIFIC HARDWARE**
 
-## 📋 Índice
+**Redis on Flash requires NVMe SSD storage and is NOT recommended for testing on standard EKS/cloud environments.**
 
-- [Visão Geral](#visão-geral)
-- [Arquitetura](#arquitetura)
-- [Quando Usar](#quando-usar)
-- [Pré-requisitos](#pré-requisitos)
-- [Guia de Deployment](#guia-de-deployment)
-- [Performance Tuning](#performance-tuning)
-- [Troubleshooting](#troubleshooting)
+Redis on Flash (RoF) is designed for production workloads with:
+- **NVMe SSD storage** (not standard EBS/cloud disks)
+- **Large datasets** (> 100GB)
+- **Cost optimization** requirements
 
----
-
-## 🎯 Visão Geral
-
-### O que é Redis on Flash?
-
-**Redis on Flash (RoF)** é uma tecnologia do Redis Enterprise que permite armazenar dados em **RAM + SSD** usando tiering inteligente:
-
-- **Hot data** (dados frequentemente acessados) → **RAM** (latência ultra-baixa)
-- **Warm data** (dados menos acessados) → **SSD/Flash** (latência baixa, custo reduzido)
-
-### Benefícios
-
-| Benefício | Descrição |
-|-----------|-----------|
-| **💰 Redução de Custos** | Até 70% de economia vs. RAM-only para datasets grandes |
-| **📈 Maior Capacidade** | Datasets de TB com fração do custo de RAM |
-| **⚡ Performance** | Hot data em RAM mantém latência sub-millisecond |
-| **🔄 Tiering Automático** | Redis gerencia automaticamente hot/warm data |
-| **🎯 Transparente** | Aplicação não precisa de mudanças |
-
-### Casos de Uso Ideais
-
-✅ **Session Store** com milhões de sessões (maioria inativa)  
-✅ **Cache** com working set pequeno mas dataset total grande  
-✅ **Time-Series** com dados recentes quentes e históricos frios  
-✅ **Analytics** com queries em dados recentes  
-✅ **Leaderboards** com milhões de usuários mas top-N acessado  
+**For EKS testing, this deployment pattern is SKIPPED** as it requires specialized storage that is not cost-effective for validation purposes.
 
 ---
 
-## 🏗️ Arquitetura
+## Overview
 
-### Tiering de Dados
+### What is Redis on Flash?
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Redis on Flash                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  RAM Tier (Hot Data)                                 │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  - Dados frequentemente acessados                    │   │
-│  │  - Keys + valores pequenos                           │   │
-│  │  - Latência: < 1ms                                   │   │
-│  │  - Tamanho: 20-30% do dataset total                  │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                           ▲                                   │
-│                           │ Automatic Tiering                 │
-│                           ▼                                   │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Flash/SSD Tier (Warm Data)                          │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  - Dados menos acessados                             │   │
-│  │  - Valores grandes                                   │   │
-│  │  - Latência: 1-5ms                                   │   │
-│  │  - Tamanho: 70-80% do dataset total                  │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
-```
+**Redis on Flash (RoF)** is a Redis Enterprise technology that stores data across **RAM + SSD** using intelligent tiering:
 
-### Como Funciona
+- **Hot data** (frequently accessed) → **RAM** (ultra-low latency)
+- **Warm data** (less frequently accessed) → **SSD/Flash** (low latency, reduced cost)
 
-1. **Write**: Dados escritos primeiro em RAM
-2. **Tiering**: Redis move valores grandes/frios para Flash automaticamente
-3. **Read Hot**: Dados em RAM retornados imediatamente (< 1ms)
-4. **Read Warm**: Dados em Flash carregados para RAM sob demanda (1-5ms)
-5. **Eviction**: Dados antigos removidos do Flash conforme política
+### Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **Cost Reduction** | Up to 70% savings vs. RAM-only for large datasets |
+| **Higher Capacity** | TB-scale datasets at fraction of RAM cost |
+| **Performance** | Hot data in RAM maintains sub-millisecond latency |
+| **Automatic Tiering** | Redis automatically manages hot/warm data |
+| **Transparent** | No application changes required |
+
+### Ideal Use Cases
+
+- **Session Store** with millions of sessions (mostly inactive)
+- **Cache** with small working set but large total dataset
+- **Time-Series** with recent hot data and historical cold data
+- **Analytics** with queries on recent data
+- **Leaderboards** with millions of users but only top-N accessed
 
 ---
 
-## ✅ Quando Usar
+## When to Use
 
-### ✅ Use Redis on Flash quando:
+### Use Redis on Flash when:
 
-- Dataset total > 100GB
-- Working set (hot data) < 30% do dataset total
-- Valores grandes (> 1KB)
-- Latência de 1-5ms é aceitável para warm data
-- Custo é fator crítico
+- Total dataset > 100GB
+- Working set (hot data) < 30% of total dataset
+- Large values (> 1KB)
+- 1-5ms latency acceptable for warm data
+- Cost is critical factor
+- **NVMe SSD storage available**
 
-### ❌ NÃO use Redis on Flash quando:
+### DO NOT use Redis on Flash when:
 
-- Dataset total < 50GB (RAM-only é mais simples)
-- Working set > 50% do dataset (pouco benefício)
-- Valores muito pequenos (< 100 bytes)
-- Latência sub-millisecond é crítica para TODOS os dados
-- Workload é 100% write-heavy
+- Total dataset < 50GB (RAM-only is simpler)
+- All data is hot (100% working set)
+- Sub-millisecond latency required for all data
+- Small values (< 500 bytes)
+- **Standard cloud storage (EBS, Azure Disk, GCP PD)** - performance will be poor
 
 ---
 
-## ✅ Pré-requisitos
+## Prerequisites
 
-### 1. Storage Class com SSD/NVMe
+### 1. Storage Requirements
 
-Redis on Flash requer **SSD de alta performance** (NVMe recomendado):
+**CRITICAL:** Redis on Flash requires high-performance NVMe SSD storage.
+
+**AWS:**
+- Instance types with NVMe SSD: `i3`, `i3en`, `i4i`, `im4gn`, `is4gen`
+- **NOT recommended:** EBS volumes (gp2, gp3, io1, io2) - too slow for RoF
+
+**Azure:**
+- VM types with NVMe SSD: `Lsv2`, `Lsv3`
+- **NOT recommended:** Premium SSD, Ultra Disk - too slow for RoF
+
+**GCP:**
+- Instance types with local SSD: `n2-standard` with local SSD
+- **NOT recommended:** Persistent Disk (pd-ssd, pd-extreme) - too slow for RoF
+
+### 2. Kubernetes Cluster
 
 ```bash
-kubectl get storageclass
-# NAME                 PROVISIONER             RECLAIMPOLICY
-# gp3-ssd             ebs.csi.aws.com         Delete
-# premium-ssd-lrs     disk.csi.azure.com      Delete
-# pd-ssd              pd.csi.storage.gke.io   Delete
+kubectl version --short
 ```
 
-### 2. Nodes com SSD Local (Opcional mas Recomendado)
-
-Para máxima performance, use nodes com **SSD local** (instance store):
-
-**AWS**: `i3`, `i3en`, `i4i` instances  
-**Azure**: `Lsv2`, `Lsv3` series  
-**GCP**: `n2-standard` com local SSD  
-
-### 3. Redis Enterprise Cluster
+### 3. Redis Enterprise Operator and REC
 
 ```bash
+kubectl get deployment redis-enterprise-operator -n redis-enterprise
 kubectl get rec -n redis-enterprise
-# NAME                  AGE
-# redis-enterprise      10m
 ```
 
 ---
 
-## 📖 Guia de Deployment
+## Deployment Guide (Production Only)
 
-### Passo 1: Criar StorageClass para Flash
+⚠️ **This guide is for PRODUCTION deployments with proper NVMe SSD storage.**
 
+### Step 1: Create StorageClass
+
+Choose the appropriate StorageClass for your cloud provider:
+
+**AWS (i3/i3en/i4i instances with NVMe):**
 ```bash
-# Escolha o arquivo apropriado para seu cloud provider
-kubectl apply -f 01-storage-class-aws.yaml      # AWS EBS gp3
-# OU
-kubectl apply -f 01-storage-class-azure.yaml    # Azure Premium SSD
-# OU
-kubectl apply -f 01-storage-class-gcp.yaml      # GCP PD-SSD
+kubectl apply -f 01-storage-class-aws.yaml
 ```
 
-### Passo 2: Configurar REC com Flash Storage
+**Azure (Lsv2/Lsv3 VMs with NVMe):**
+```bash
+kubectl apply -f 01-storage-class-azure.yaml
+```
+
+**GCP (instances with local SSD):**
+```bash
+kubectl apply -f 01-storage-class-gcp.yaml
+```
+
+### Step 2: Deploy REC with Flash Storage
 
 ```bash
 kubectl apply -f 02-rec-with-flash.yaml
 ```
 
-Este arquivo configura:
-- **redisOnFlashSpec**: Habilita Redis on Flash
-- **flashStorageEngine**: `rocksdb` (engine otimizado)
-- **flashDiskSize**: Tamanho do SSD por pod (ex: 500Gi)
-- **persistentSpec**: StorageClass para Flash volumes
+Wait for REC to be ready:
+```bash
+kubectl get rec -n redis-enterprise -w
+```
 
-### Passo 3: Criar REDB com Redis on Flash
+### Step 3: Deploy REDB with Flash
 
 ```bash
 kubectl apply -f 03-redb-with-flash.yaml
 ```
 
-Configurações importantes:
-- **memorySize**: RAM para hot data (ex: 10GB)
-- **redisOnFlashSpec.flashDiskSize**: SSD para warm data (ex: 100GB)
-- **Ratio**: 1:10 (10GB RAM + 100GB Flash = 110GB total)
+Wait for REDB to be active:
+```bash
+kubectl wait --for=jsonpath='{.status.status}'=active redb/flash-db -n redis-enterprise --timeout=300s
+```
 
-### Passo 4: Verificar Deployment
+### Step 4: Verify Flash Configuration
 
 ```bash
-# Verificar REC
-kubectl get rec redis-enterprise-flash -n redis-enterprise
-
-# Verificar PVCs de Flash
-kubectl get pvc -n redis-enterprise | grep flash
-
-# Verificar REDB
-kubectl get redb flash-db-1 -n redis-enterprise
-kubectl describe redb flash-db-1 -n redis-enterprise
+kubectl get redb flash-db -n redis-enterprise
+kubectl exec -n redis-enterprise rec-0 -- rladmin status databases
 ```
 
 ---
 
-## 🎯 Configurações Recomendadas
+## Performance Tuning
 
-### Ratio RAM:Flash
-
-| Workload | RAM | Flash | Ratio | Uso |
-|----------|-----|-------|-------|-----|
-| **Session Store** | 10GB | 90GB | 1:9 | Sessões antigas raramente acessadas |
-| **Cache** | 20GB | 80GB | 1:4 | Working set médio |
-| **Time-Series** | 15GB | 135GB | 1:9 | Dados recentes quentes |
-| **Analytics** | 30GB | 120GB | 1:4 | Queries em dados recentes |
-
-### Tamanho de Valores
-
-| Tamanho Valor | Recomendação |
-|---------------|--------------|
-| < 500 bytes | ❌ RAM-only (RoF não compensa) |
-| 500B - 5KB | ⚠️ Avaliar caso a caso |
-| > 5KB | ✅ RoF ideal |
+See [04-performance-tuning.md](./04-performance-tuning.md)
 
 ---
 
-## 📊 Performance Tuning
+## Troubleshooting
 
-Veja o arquivo [04-performance-tuning.md](./04-performance-tuning.md) para guia completo de tuning.
-
----
-
-## 🔍 Troubleshooting
-
-Veja o arquivo [05-troubleshooting.md](./05-troubleshooting.md) para guia completo de troubleshooting.
+See [05-troubleshooting.md](./05-troubleshooting.md)
 
 ---
 
-## 📚 Arquivos
+## Cleanup
 
-| Arquivo | Descrição |
-|---------|-----------|
-| `01-storage-class-aws.yaml` | StorageClass para AWS EBS gp3 |
-| `01-storage-class-azure.yaml` | StorageClass para Azure Premium SSD |
-| `01-storage-class-gcp.yaml` | StorageClass para GCP PD-SSD |
-| `02-rec-with-flash.yaml` | REC configurado para Redis on Flash |
-| `03-redb-with-flash.yaml` | REDB usando Redis on Flash |
-| `04-performance-tuning.md` | Guia de performance tuning |
-| `05-troubleshooting.md` | Guia de troubleshooting |
-
----
-
-## 🔗 Referências
-
-- [Redis on Flash Documentation](https://redis.io/docs/latest/operate/rs/databases/redis-on-flash/)
-- [Redis on Flash Architecture](https://redis.io/docs/latest/operate/rs/databases/redis-on-flash/rof-architecture/)
-- [Performance Optimization](https://redis.io/docs/latest/operate/rs/databases/redis-on-flash/rof-performance/)
+```bash
+kubectl delete -f 03-redb-with-flash.yaml
+kubectl delete -f 02-rec-with-flash.yaml
+kubectl delete -f 01-storage-class-aws.yaml
+```
 
