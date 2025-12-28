@@ -1,0 +1,31 @@
+# ============================================================================
+# RedisInsight Service - LoadBalancer
+# ============================================================================
+#
+# Exposes RedisInsight via cloud provider LoadBalancer.
+# Use this for direct external access.
+#
+# Note: Service name is 'redisinsight-service' (not 'redisinsight') to avoid
+# conflicts with environment variables created by K8s service discovery.
+# ============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redisinsight-service
+  namespace: redis-enterprise
+  labels:
+    app: redisinsight
+    component: management-ui
+spec:
+  type: LoadBalancer
+  
+  ports:
+  - port: 80
+    targetPort: 5540
+    protocol: TCP
+    name: http
+  
+  selector:
+    app: redisinsight
+

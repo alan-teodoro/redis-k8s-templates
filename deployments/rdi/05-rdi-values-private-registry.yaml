@@ -1,0 +1,175 @@
+# ============================================================================
+# RDI Helm Values - Private Image Registry Configuration
+# ============================================================================
+#
+# Use this configuration when pulling RDI images from a private registry
+# instead of dockerhub.
+#
+# Prerequisites:
+# 1. Pull RDI images from dockerhub and push to your private registry
+# 2. Create image pull secret in Kubernetes
+# 3. Update registry and repository values below
+#
+# ============================================================================
+
+# ============================================================================
+# Required RDI Images (version 1.15.1)
+# ============================================================================
+# Pull these images from dockerhub and push to your private registry:
+#
+# redis/rdi-api:1.15.1
+# redis/rdi-operator:1.15.1
+# redis/rdi-monitor:1.15.1
+# redis/rdi-processor:1.15.1
+# redis/rdi-collector-api:1.15.1
+# redis/rdi-collector-initializer:1.15.1
+# redis/rdi-flink-collector:1.15.1  (only if using Google Spanner)
+#
+# Third-party images:
+# redislabs/debezium-server:3.0.8.Final-rdi.1
+# redis/reloader:v1.1.0
+# redis/kube-webhook-certgen:v20221220-controller-v1.5.1-58-g787ea74b6
+# ============================================================================
+
+# ============================================================================
+# Example: Pull and Push Images to Private Registry
+# ============================================================================
+# export RDI_VERSION=1.15.1
+# export PRIVATE_REGISTRY=your-registry.example.com
+# export PRIVATE_REPO=redis
+#
+# # RDI images
+# for image in rdi-api rdi-operator rdi-monitor rdi-processor rdi-collector-api rdi-collector-initializer; do
+#   docker pull redis/${image}:${RDI_VERSION}
+#   docker tag redis/${image}:${RDI_VERSION} ${PRIVATE_REGISTRY}/${PRIVATE_REPO}/${image}:${RDI_VERSION}
+#   docker push ${PRIVATE_REGISTRY}/${PRIVATE_REPO}/${image}:${RDI_VERSION}
+# done
+#
+# # Third-party images
+# docker pull redislabs/debezium-server:3.0.8.Final-rdi.1
+# docker tag redislabs/debezium-server:3.0.8.Final-rdi.1 ${PRIVATE_REGISTRY}/${PRIVATE_REPO}/debezium-server:3.0.8.Final-rdi.1
+# docker push ${PRIVATE_REGISTRY}/${PRIVATE_REPO}/debezium-server:3.0.8.Final-rdi.1
+#
+# docker pull redis/reloader:v1.1.0
+# docker tag redis/reloader:v1.1.0 ${PRIVATE_REGISTRY}/${PRIVATE_REPO}/reloader:v1.1.0
+# docker push ${PRIVATE_REGISTRY}/${PRIVATE_REPO}/reloader:v1.1.0
+#
+# docker pull redis/kube-webhook-certgen:v20221220-controller-v1.5.1-58-g787ea74b6
+# docker tag redis/kube-webhook-certgen:v20221220-controller-v1.5.1-58-g787ea74b6 ${PRIVATE_REGISTRY}/${PRIVATE_REPO}/kube-webhook-certgen:v20221220-controller-v1.5.1-58-g787ea74b6
+# docker push ${PRIVATE_REGISTRY}/${PRIVATE_REPO}/kube-webhook-certgen:v20221220-controller-v1.5.1-58-g787ea74b6
+# ============================================================================
+
+# ============================================================================
+# Create Image Pull Secret
+# ============================================================================
+# kubectl create secret docker-registry rdi-registry-secret \
+#   --docker-server=your-registry.example.com \
+#   --docker-username=your-username \
+#   --docker-password=your-password \
+#   --docker-email=your-email@example.com \
+#   -n rdi
+# ============================================================================
+
+# ============================================================================
+# RDI Database Connection
+# ============================================================================
+connection:
+  host: "rdi-database.redis-enterprise.svc.cluster.local"
+  port: 12100
+  password: "CHANGE_ME"
+  
+  ssl:
+    enabled: false
+
+# ============================================================================
+# RDI API Configuration
+# ============================================================================
+api:
+  jwtKey: "CHANGE_ME_GENERATE_WITH_URANDOM"
+  service:
+    type: ClusterIP
+    port: 8080
+
+# ============================================================================
+# Global Settings - Private Registry
+# ============================================================================
+global:
+  # Private image registry settings
+  image:
+    # Your private registry URL
+    registry: your-registry.example.com
+    
+    # Repository name (if different from "redis")
+    repository: redis
+    
+    pullPolicy: IfNotPresent
+  
+  # Image pull secrets
+  imagePullSecrets:
+    - name: rdi-registry-secret
+  
+  openShift: false
+  
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+
+# ============================================================================
+# Metrics Exporter
+# ============================================================================
+metricExporter:
+  enabled: true
+  service:
+    type: ClusterIP
+    port: 8081
+
+# ============================================================================
+# Resource Limits
+# ============================================================================
+resources:
+  api:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  
+  operator:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  
+  metricExporter:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+# ============================================================================
+# Collector and Processor
+# ============================================================================
+collector:
+  enabled: true
+
+processor:
+  enabled: true
+
+reloader:
+  enabled: true
+
+# ============================================================================
+# Installation with Private Registry
+# ============================================================================
+# helm upgrade --install rdi rdi-1.15.1.tgz \
+#   -f 05-rdi-values-private-registry.yaml \
+#   -n rdi \
+#   --create-namespace
+

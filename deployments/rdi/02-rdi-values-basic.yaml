@@ -1,0 +1,165 @@
+# ============================================================================
+# RDI Helm Values - Basic Configuration (Development/Test)
+# ============================================================================
+#
+# This is a minimal configuration for development and testing.
+# For production, use 03-rdi-values-production.yaml
+#
+# Prerequisites:
+# 1. RDI database created (01-rdi-database.yaml)
+# 2. JWT key generated: head -c 32 /dev/urandom | base64
+# 3. RDI database password obtained from secret
+#
+# Installation:
+# helm upgrade --install rdi rdi-1.15.1.tgz \
+#   -f 02-rdi-values-basic.yaml \
+#   -n rdi \
+#   --create-namespace
+# ============================================================================
+
+# ============================================================================
+# RDI Database Connection (REQUIRED)
+# ============================================================================
+connection:
+  # RDI database host (FQDN or service name)
+  # For in-cluster database: <service-name>.<namespace>.svc.cluster.local
+  host: "rdi-database.redis-enterprise.svc.cluster.local"
+  
+  # RDI database port
+  port: 12100
+  
+  # RDI database password
+  # Get from secret: kubectl get secret redb-rdi-database -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d
+  password: "CHANGE_ME"
+  
+  # TLS configuration (disabled for basic setup)
+  ssl:
+    enabled: false
+    # For TLS, set enabled: true and provide certificates:
+    # cacert: |
+    #   -----BEGIN CERTIFICATE-----
+    #   ...
+    #   -----END CERTIFICATE-----
+
+# ============================================================================
+# RDI API Configuration (REQUIRED)
+# ============================================================================
+api:
+  # JWT key for API authentication (256 bits = 32 bytes)
+  # Generate with: head -c 32 /dev/urandom | base64
+  jwtKey: "CHANGE_ME_GENERATE_WITH_URANDOM"
+  
+  # API service type
+  service:
+    type: ClusterIP
+    port: 8080
+
+# ============================================================================
+# Global Settings
+# ============================================================================
+global:
+  # Image settings (default: pull from dockerhub)
+  image:
+    registry: docker.io
+    repository: redis
+    pullPolicy: IfNotPresent
+  
+  # OpenShift flag (set to true if deploying on OpenShift)
+  openShift: false
+  
+  # Security context (default for non-OpenShift)
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+
+# ============================================================================
+# Metrics Exporter (Prometheus)
+# ============================================================================
+metricExporter:
+  enabled: true
+  service:
+    type: ClusterIP
+    port: 8081
+
+# ============================================================================
+# Ingress (disabled by default)
+# ============================================================================
+ingress:
+  enabled: false
+  # To enable ingress, see 06-ingress-nginx.yaml or 07-ingress-gateway-api.yaml
+
+# ============================================================================
+# Resource Limits (Basic - for dev/test)
+# ============================================================================
+resources:
+  api:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  
+  operator:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  
+  metricExporter:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# ============================================================================
+# Collector Configuration
+# ============================================================================
+collector:
+  # Debezium connector configuration
+  # This will be configured via RDI pipeline deployment
+  enabled: true
+
+# ============================================================================
+# Reloader (watches ConfigMaps and Secrets for changes)
+# ============================================================================
+reloader:
+  enabled: true
+
+# ============================================================================
+# Post-Installation Verification
+# ============================================================================
+# After installation, verify:
+#
+# 1. Check Helm release:
+#    helm list -n rdi
+#
+# 2. Check pods:
+#    kubectl get pods -n rdi
+#    # Expected pods:
+#    # - collector-api-xxx
+#    # - rdi-api-xxx
+#    # - rdi-metric-exporter-xxx
+#    # - rdi-operator-xxx
+#    # - rdi-reloader-xxx
+#
+# 3. Check RDI API:
+#    kubectl port-forward -n rdi svc/rdi-api 8080:8080
+#    curl http://localhost:8080/health
+#
+# 4. Add RDI to Redis Insight:
+#    - Open Redis Insight
+#    - Go to RDI section
+#    - Add connection to http://rdi-api.rdi.svc.cluster.local:8080
+#
+# 5. Check metrics:
+#    kubectl port-forward -n rdi svc/rdi-metric-exporter 8081:8081
+#    curl http://localhost:8081/metrics/collector-source
+#    curl http://localhost:8081/metrics/rdi
+

@@ -1,0 +1,159 @@
+# ============================================================================
+# RDI Database - Redis Enterprise Database for RDI State Storage
+# ============================================================================
+#
+# CRITICAL REQUIREMENTS:
+# 1. Eviction Policy: noeviction (NEVER evict RDI state data)
+# 2. Persistence: AOF with fsync every 1 sec (durability)
+# 3. Clustering: DISABLED (RDI does not work with clustered databases)
+# 4. RAM: 250MB (production) / 125MB (dev)
+# 5. Replication: 1 primary + 1 replica (production)
+#
+# ⚠️ WARNING: If this database is clustered, RDI WILL NOT WORK!
+# ============================================================================
+
+---
+# Production RDI Database (250MB, replicated, TLS, password)
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: rdi-database
+  namespace: redis-enterprise
+  labels:
+    app: rdi
+    component: state-storage
+    environment: production
+spec:
+  # Redis Enterprise Cluster reference
+  redisEnterpriseCluster:
+    name: rec
+
+  # Database size - 250MB for production
+  memorySize: 250MB
+
+  # ⚠️ CRITICAL: Clustering MUST be disabled
+  # RDI does not work with clustered databases
+  shardCount: 1
+  
+  # Replication for high availability
+  replication: true
+
+  # ⚠️ CRITICAL: Eviction policy MUST be noeviction
+  # RDI stores state data that must NEVER be evicted
+  evictionPolicy: noeviction
+
+  # ⚠️ CRITICAL: Persistence MUST be AOF with fsync every 1 sec
+  # Ensures durability of RDI state
+  persistence: aof
+  aofPolicy: appendfsync-every-sec
+
+  # TLS for secure connections (production)
+  tlsMode: enabled
+
+  # Database port
+  databasePort: 12100
+
+  # Database password (auto-generated secret)
+  databaseSecretName: redb-rdi-database
+
+  # Module list (RDI may use RedisJSON for state storage)
+  modulesList:
+    - name: RedisJSON
+      version: 2.8.4
+
+  # Resource limits
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+    requests:
+      cpu: 500m
+      memory: 256Mi
+
+  # Backup configuration (optional but recommended)
+  backup:
+    interval: 24h
+    s3:
+      awsSecretName: aws-credentials
+      bucketName: redis-backups
+      subdir: rdi-database
+
+---
+# Development RDI Database (125MB, no replication, no TLS)
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: rdi-database-dev
+  namespace: redis-enterprise
+  labels:
+    app: rdi
+    component: state-storage
+    environment: development
+spec:
+  redisEnterpriseCluster:
+    name: rec
+
+  # Smaller size for dev/test
+  memorySize: 125MB
+
+  # ⚠️ CRITICAL: Clustering MUST be disabled
+  shardCount: 1
+  
+  # No replication for dev
+  replication: false
+
+  # ⚠️ CRITICAL: Eviction policy MUST be noeviction
+  evictionPolicy: noeviction
+
+  # ⚠️ CRITICAL: Persistence MUST be AOF
+  persistence: aof
+  aofPolicy: appendfsync-every-sec
+
+  # No TLS for dev (simpler setup)
+  tlsMode: disabled
+
+  databasePort: 12100
+
+  databaseSecretName: redb-rdi-database-dev
+
+  modulesList:
+    - name: RedisJSON
+      version: 2.8.4
+
+---
+# Verification Script
+# Run this after creating the database to verify it's configured correctly
+#
+# kubectl apply -f 01-rdi-database.yaml -n redis-enterprise
+#
+# # Wait for database to be ready
+# kubectl wait --for=condition=Ready redb/rdi-database -n redis-enterprise --timeout=300s
+#
+# # Get database password
+# kubectl get secret redb-rdi-database -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d
+#
+# # Get database endpoint
+# kubectl get redb rdi-database -n redis-enterprise -o jsonpath='{.status.databaseURL}'
+#
+# # ⚠️ CRITICAL VERIFICATION: Check that clustering is DISABLED
+# # Via Redis Enterprise REST API:
+# REC_API=$(kubectl get rec rec -n redis-enterprise -o jsonpath='{.status.clusterURL}')
+# REC_USER="admin@redis.com"
+# REC_PASS="RedisAdmin123!"
+#
+# curl -k -u $REC_USER:$REC_PASS $REC_API/v1/bdbs | \
+#   jq '.[] | select(.name=="rdi-database") | {name, sharding, eviction_policy, data_persistence, aof_policy}'
+#
+# # Expected output:
+# # {
+# #   "name": "rdi-database",
+# #   "sharding": false,              ← MUST be false
+# #   "eviction_policy": "noeviction", ← MUST be noeviction
+# #   "data_persistence": "aof",       ← MUST be aof
+# #   "aof_policy": "appendfsync-every-sec" ← MUST be appendfsync-every-sec
+# # }
+#
+# # If sharding is true, you MUST delete and recreate the database:
+# # kubectl delete redb rdi-database -n redis-enterprise
+# # kubectl apply -f 01-rdi-database.yaml -n redis-enterprise
+

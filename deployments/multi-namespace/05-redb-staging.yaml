@@ -1,0 +1,39 @@
+# Redis Enterprise Database - Staging
+#
+# REDB criado no namespace app-staging, gerenciado pelo REC no namespace redis-enterprise
+#
+# Características:
+#   - Memória: 1GB (menor que produção)
+#   - Replicação: Habilitada
+#   - Persistência: Snapshot
+#   - Eviction: allkeys-lru
+#   - Porta: 12000
+#
+# Uso:
+#   kubectl apply -f 05-redb-staging.yaml
+
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: staging-db-1
+  namespace: app-staging  # Consumer namespace
+  labels:
+    environment: staging
+    app: redis-database
+spec:
+  redisEnterpriseCluster:
+    name: redis-enterprise
+
+  memorySize: 1GB
+  replication: true
+  persistence: snapshotEvery6Hour
+  evictionPolicy: allkeys-lru
+  databasePort: 12000
+  
+  modulesList:
+    - name: RedisJSON
+    - name: RediSearch
+  
+  tlsMode: enabled
+

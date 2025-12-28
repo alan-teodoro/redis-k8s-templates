@@ -1,0 +1,183 @@
+# RBAC for Consumer Namespaces
+#
+# Este arquivo configura as permissões necessárias nos consumer namespaces
+# para o Operator e REC gerenciarem REDBs.
+#
+# Componentes (para CADA consumer namespace):
+#   1. Role: Permissões para gerenciar REDBs, secrets, services
+#   2. RoleBinding: Vincula Role aos ServiceAccounts (operator + REC)
+#
+# Uso:
+#   kubectl apply -f 03-consumer-rbac.yaml
+
+---
+# Role para app-production namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: redb-role
+  namespace: app-production
+  labels:
+    app: redis-enterprise
+rules:
+  # Permissões para gerenciar REDBs
+  - apiGroups: ["app.redislabs.com"]
+    resources:
+      - redisenterprisedatabases
+      - redisenterprisedatabases/status
+      - redisenterprisedatabases/finalizers
+      - redisenterpriseactiveactivedatabases
+      - redisenterpriseactiveactivedatabases/status
+      - redisenterpriseactiveactivedatabases/finalizers
+    verbs: ["delete", "get", "list", "patch", "create", "update", "watch"]
+
+  # Permissões para gerenciar secrets (credentials)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["update", "get", "watch", "create", "patch", "list"]
+
+  # Permissões para gerenciar services (database endpoints)
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "update", "patch", "create", "delete", "watch"]
+
+  # Permissões para ler endpointslices
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+
+  # Permissões para criar eventos
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+# RoleBinding para app-production namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redb-role
+  namespace: app-production
+  labels:
+    app: redis-enterprise
+subjects:
+  # ServiceAccount do Operator
+  - kind: ServiceAccount
+    name: redis-enterprise-operator
+    namespace: redis-enterprise
+
+  # ServiceAccount do REC (mesmo nome do REC custom resource)
+  - kind: ServiceAccount
+    name: redis-enterprise
+    namespace: redis-enterprise
+roleRef:
+  kind: Role
+  name: redb-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Role para app-staging namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: redb-role
+  namespace: app-staging
+  labels:
+    app: redis-enterprise
+rules:
+  - apiGroups: ["app.redislabs.com"]
+    resources:
+      - redisenterprisedatabases
+      - redisenterprisedatabases/status
+      - redisenterprisedatabases/finalizers
+      - redisenterpriseactiveactivedatabases
+      - redisenterpriseactiveactivedatabases/status
+      - redisenterpriseactiveactivedatabases/finalizers
+    verbs: ["delete", "get", "list", "patch", "create", "update", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["update", "get", "watch", "create", "patch", "list"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "update", "patch", "create", "delete", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+# RoleBinding para app-staging namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redb-role
+  namespace: app-staging
+  labels:
+    app: redis-enterprise
+subjects:
+  - kind: ServiceAccount
+    name: redis-enterprise-operator
+    namespace: redis-enterprise
+  - kind: ServiceAccount
+    name: redis-enterprise
+    namespace: redis-enterprise
+roleRef:
+  kind: Role
+  name: redb-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Role para app-development namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: redb-role
+  namespace: app-development
+  labels:
+    app: redis-enterprise
+rules:
+  - apiGroups: ["app.redislabs.com"]
+    resources:
+      - redisenterprisedatabases
+      - redisenterprisedatabases/status
+      - redisenterprisedatabases/finalizers
+      - redisenterpriseactiveactivedatabases
+      - redisenterpriseactiveactivedatabases/status
+      - redisenterpriseactiveactivedatabases/finalizers
+    verbs: ["delete", "get", "list", "patch", "create", "update", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["update", "get", "watch", "create", "patch", "list"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "update", "patch", "create", "delete", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+
+---
+# RoleBinding para app-development namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redb-role
+  namespace: app-development
+  labels:
+    app: redis-enterprise
+subjects:
+  - kind: ServiceAccount
+    name: redis-enterprise-operator
+    namespace: redis-enterprise
+  - kind: ServiceAccount
+    name: redis-enterprise
+    namespace: redis-enterprise
+roleRef:
+  kind: Role
+  name: redb-role
+  apiGroup: rbac.authorization.k8s.io
+

@@ -1,0 +1,95 @@
+# Redis Enterprise Cluster with Redis on Flash
+#
+# REC configurado para suportar Redis on Flash com SSD storage.
+#
+# Características:
+#   - 3 nodes
+#   - 16GB RAM por node
+#   - 500GB Flash/SSD por node
+#   - RocksDB storage engine
+#   - Replicação habilitada
+#
+# Uso:
+#   kubectl apply -f 02-rec-with-flash.yaml
+
+---
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: redis-enterprise-flash
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    storage-type: flash
+spec:
+  # Número de nodes no cluster
+  nodes: 3
+
+  # Recursos por node
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "8000m"
+      memory: 20Gi  # 16GB para Redis + 4GB para OS
+    requests:
+      cpu: "4000m"
+      memory: 20Gi
+
+  # Configuração de Redis on Flash
+  redisOnFlashSpec:
+    # Habilita Redis on Flash
+    enabled: true
+    
+    # Storage engine: rocksdb (recomendado) ou speedb
+    flashStorageEngine: rocksdb
+    
+    # Tamanho do Flash/SSD por node
+    # Este valor define o PVC size para cada pod
+    flashDiskSize: 500Gi
+
+  # Configuração de persistência para Flash volumes
+  persistentSpec:
+    enabled: true
+    
+    # StorageClass para Flash volumes
+    # Escolha o apropriado para seu cloud provider:
+    # - redis-flash-gp3 (AWS)
+    # - redis-flash-premium-ssd (Azure)
+    # - redis-flash-pd-ssd (GCP)
+    storageClassName: redis-flash-gp3
+    
+    # Volume mode
+    volumeMode: Filesystem
+
+  # Configuração de UI
+  uiServiceType: ClusterIP
+  
+  # Credenciais de admin
+  username: admin@redis.com
+  
+  # Licença (opcional - usar trial se não tiver licença)
+  # licenseSecretName: redis-enterprise-license
+
+  # Services rigger
+  servicesRiggerSpec:
+    databaseServiceType: ClusterIP
+    serviceNaming: bdb_name
+
+  # Rack awareness para HA (opcional)
+  # rackAwarenessNodeLabel: topology.kubernetes.io/zone
+
+---
+# PersistentVolumeClaim template (criado automaticamente pelo operator)
+# Este é apenas um exemplo do que será criado
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: redis-enterprise-flash-0-flash
+#   namespace: redis-enterprise
+# spec:
+#   accessModes:
+#     - ReadWriteOnce
+#   storageClassName: redis-flash-gp3
+#   resources:
+#     requests:
+#       storage: 500Gi
+

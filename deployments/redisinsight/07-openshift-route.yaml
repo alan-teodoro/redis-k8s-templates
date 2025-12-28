@@ -1,0 +1,37 @@
+# ============================================================================
+# RedisInsight - OpenShift Route
+# ============================================================================
+#
+# Exposes RedisInsight via OpenShift Route with TLS.
+#
+# Prerequisites:
+# - OpenShift cluster
+# - RedisInsight deployment and service created
+#
+# Access: https://redisinsight-redis-enterprise.apps.<cluster-domain>
+# ============================================================================
+
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: redisinsight
+  namespace: redis-enterprise
+  labels:
+    app: redisinsight
+spec:
+  host: redisinsight-redis-enterprise.apps.example.com  # Change to your cluster domain
+  
+  to:
+    kind: Service
+    name: redisinsight-service
+    weight: 100
+  
+  port:
+    targetPort: http
+  
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  
+  wildcardPolicy: None
+

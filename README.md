@@ -26,7 +26,11 @@ redis-k8s-templates/
 │
 ├── deployments/                # Redis Enterprise deployment patterns
 │   ├── single-region/          # Standard single-region deployments
-│   └── active-active/          # Multi-region Active-Active (CRDB)
+│   ├── active-active/          # Multi-region Active-Active (CRDB)
+│   ├── multi-namespace/        # Multi-namespace REDB deployments
+│   ├── redis-on-flash/         # Redis on Flash (RAM + SSD tiering)
+│   ├── rdi/                    # RDI (Redis Data Integration) - CDC from relational DBs
+│   └── redisinsight/           # RedisInsight management UI
 │
 ├── networking/                 # Networking solutions
 │   ├── gateway-api/            # Kubernetes Gateway API (NGINX Gateway Fabric)
@@ -55,8 +59,9 @@ redis-k8s-templates/
 │   └── grafana/                # Grafana dashboards
 │
 ├── observability/              # Logging & Observability
-│   └── logging/                # Logging solutions
-│       └── loki/               # Grafana Loki + Promtail
+│   ├── logging/                # Logging solutions
+│   │   └── loki/               # Grafana Loki + Promtail
+│   └── rdi/                    # RDI observability (Prometheus metrics, Grafana dashboards)
 │
 ├── operations/                 # Operational guides
 │   ├── ha-disaster-recovery/   # HA & DR strategies
@@ -90,6 +95,10 @@ Choose your deployment pattern:
 |---------|-------|----------|
 | **Single-Region** | [deployments/single-region/](deployments/single-region/) | Standard production deployment |
 | **Active-Active** | [deployments/active-active/](deployments/active-active/) | Multi-region, geo-distributed |
+| **Multi-Namespace** | [deployments/multi-namespace/](deployments/multi-namespace/) | Isolated databases across namespaces |
+| **Redis on Flash** | [deployments/redis-on-flash/](deployments/redis-on-flash/) | RAM + SSD tiering (cost optimization) |
+| **RDI (CDC)** | [deployments/rdi/](deployments/rdi/) | Real-time data integration from relational DBs |
+| **RedisInsight** | [deployments/redisinsight/](deployments/redisinsight/) | Management UI and monitoring tool |
 
 ### 3. Essential Components
 
@@ -142,6 +151,7 @@ Configure essential components for production:
 | **Prometheus** | [monitoring/prometheus/](monitoring/prometheus/) | Metrics collection and alerting |
 | **Grafana** | [monitoring/grafana/](monitoring/grafana/) | Dashboards and visualization |
 | **Loki** | [observability/logging/loki/](observability/logging/loki/) | Log aggregation and querying |
+| **RDI Observability** | [observability/rdi/](observability/rdi/) | RDI metrics, dashboards, and alerts |
 
 ### � Operations
 
@@ -158,6 +168,22 @@ Configure essential components for production:
 |-------|-------|-------------|
 | **ArgoCD** | [integrations/argocd/](integrations/argocd/) | GitOps deployment |
 | **HashiCorp Vault** | [integrations/vault/](integrations/vault/) | Secrets management |
+
+### 🔄 RDI (Redis Data Integration)
+
+| Topic | Guide | Description |
+|-------|-------|-------------|
+| **RDI Deployment** | [deployments/rdi/](deployments/rdi/) | Helm chart installation, database setup |
+| **Source DB Prep** | [deployments/rdi/08-source-database-prep.md](deployments/rdi/08-source-database-prep.md) | PostgreSQL, MySQL, Oracle, SQL Server CDC setup |
+| **Pipeline Examples** | [deployments/rdi/09-pipeline-examples.md](deployments/rdi/09-pipeline-examples.md) | Real-world pipeline configurations |
+| **RDI Observability** | [observability/rdi/](observability/rdi/) | Prometheus metrics, Grafana dashboards, alerts |
+| **Troubleshooting** | [deployments/rdi/10-troubleshooting.md](deployments/rdi/10-troubleshooting.md) | Common issues, logs, support package |
+
+**RDI** (Redis Data Integration) enables real-time data replication from relational databases (Oracle, PostgreSQL, MySQL, SQL Server) to Redis using Change Data Capture (CDC). Perfect for:
+- **Cache modernization**: Sync relational data to Redis for ultra-fast access
+- **Event-driven architectures**: Stream database changes in real-time
+- **Microservices data**: Keep Redis in sync with source of truth databases
+- **Real-time analytics**: Process database changes as they happen
 
 ---
 
@@ -190,6 +216,16 @@ Configure essential components for production:
 4. ✅ [Enable Pod Security Standards](security/pod-security/)
 5. ✅ [Configure RBAC](security/rbac/)
 6. ✅ [Review best practices](best-practices/)
+
+### Scenario 4: Real-Time Data Integration (RDI)
+
+1. ✅ [Deploy Redis Enterprise](deployments/single-region/)
+2. ✅ [Create RDI database](deployments/rdi/01-rdi-database.yaml)
+3. ✅ [Prepare source database for CDC](deployments/rdi/08-source-database-prep.md)
+4. ✅ [Install RDI via Helm](deployments/rdi/)
+5. ✅ [Configure pipeline](deployments/rdi/09-pipeline-examples.md)
+6. ✅ [Setup RDI monitoring](observability/rdi/)
+7. ✅ [Deploy and monitor pipeline](deployments/rdi/10-troubleshooting.md)
 
 ---
 

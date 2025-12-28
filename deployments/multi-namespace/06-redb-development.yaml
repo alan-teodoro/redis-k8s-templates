@@ -1,0 +1,38 @@
+# Redis Enterprise Database - Development
+#
+# REDB criado no namespace app-development, gerenciado pelo REC no namespace redis-enterprise
+#
+# Características:
+#   - Memória: 512MB (menor configuração)
+#   - Replicação: Desabilitada (economia de recursos)
+#   - Persistência: None (desenvolvimento)
+#   - Eviction: allkeys-lru
+#   - Porta: 12000
+#
+# Uso:
+#   kubectl apply -f 06-redb-development.yaml
+
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: dev-db-1
+  namespace: app-development  # Consumer namespace
+  labels:
+    environment: development
+    app: redis-database
+spec:
+  redisEnterpriseCluster:
+    name: redis-enterprise
+
+  memorySize: 512MB
+  replication: false  # Sem replicação em dev
+  persistence: disabled  # Sem persistência em dev
+  evictionPolicy: allkeys-lru
+  databasePort: 12000
+  
+  modulesList:
+    - name: RedisJSON
+  
+  tlsMode: disabled  # TLS desabilitado em dev para facilitar testes
+

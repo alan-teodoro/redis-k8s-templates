@@ -1,0 +1,162 @@
+# Advanced RERC Examples
+#
+# Este arquivo contém exemplos avançados de configuração de RERC para diferentes cenários.
+#
+# Cenários:
+#   1. Multi-Region (3 regiões)
+#   2. Hybrid Cloud (AWS + Azure + GCP)
+#   3. Multi-Cluster em mesma região (HA)
+#   4. RERC com TLS customizado
+#   5. RERC com API proxy
+
+---
+# Exemplo 1: Multi-Region Active-Active (3 Regiões)
+# Cenário: Global application com usuários em US, EU, APAC
+
+# Cluster US-East
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseRemoteCluster
+metadata:
+  name: rerc-us-east
+  namespace: redis-enterprise
+  labels:
+    region: us-east
+    cloud: aws
+spec:
+  recName: rec-us-east
+  recNamespace: redis-enterprise
+  apiFqdnUrl: api-us-east.redis.example.com
+  dbFqdnSuffix: .db-us-east.redis.example.com
+  secretName: rerc-us-east-secret
+
+---
+# Cluster EU-West
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseRemoteCluster
+metadata:
+  name: rerc-eu-west
+  namespace: redis-enterprise
+  labels:
+    region: eu-west
+    cloud: aws
+spec:
+  recName: rec-eu-west
+  recNamespace: redis-enterprise
+  apiFqdnUrl: api-eu-west.redis.example.com
+  dbFqdnSuffix: .db-eu-west.redis.example.com
+  secretName: rerc-eu-west-secret
+
+---
+# Cluster APAC-South
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseRemoteCluster
+metadata:
+  name: rerc-apac-south
+  namespace: redis-enterprise
+  labels:
+    region: apac-south
+    cloud: aws
+spec:
+  recName: rec-apac-south
+  recNamespace: redis-enterprise
+  apiFqdnUrl: api-apac-south.redis.example.com
+  dbFqdnSuffix: .db-apac-south.redis.example.com
+  secretName: rerc-apac-south-secret
+
+---
+# REAADB usando 3 regiões
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseActiveActiveDatabase
+metadata:
+  name: global-aadb
+  namespace: redis-enterprise
+spec:
+  participatingClusters:
+    - name: rerc-us-east
+    - name: rerc-eu-west
+    - name: rerc-apac-south
+  
+  globalConfigurations:
+    memorySize: 5GB
+    replication: true
+    persistence: aofEveryOneSec
+    evictionPolicy: volatile-lru
+    databasePort: 12000
+    modulesList:
+      - name: RedisJSON
+      - name: RediSearch
+    tlsMode: enabled
+
+---
+# Exemplo 2: Hybrid Cloud (AWS + Azure + GCP)
+# Cenário: Multi-cloud para evitar vendor lock-in
+
+# Cluster AWS
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseRemoteCluster
+metadata:
+  name: rerc-aws
+  namespace: redis-enterprise
+  labels:
+    cloud: aws
+    region: us-east-1
+spec:
+  recName: rec-aws
+  recNamespace: redis-enterprise
+  apiFqdnUrl: api-aws.redis.example.com
+  dbFqdnSuffix: .db-aws.redis.example.com
+  secretName: rerc-aws-secret
+
+---
+# Cluster Azure
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseRemoteCluster
+metadata:
+  name: rerc-azure
+  namespace: redis-enterprise
+  labels:
+    cloud: azure
+    region: eastus
+spec:
+  recName: rec-azure
+  recNamespace: redis-enterprise
+  apiFqdnUrl: api-azure.redis.example.com
+  dbFqdnSuffix: .db-azure.redis.example.com
+  secretName: rerc-azure-secret
+
+---
+# Cluster GCP
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseRemoteCluster
+metadata:
+  name: rerc-gcp
+  namespace: redis-enterprise
+  labels:
+    cloud: gcp
+    region: us-central1
+spec:
+  recName: rec-gcp
+  recNamespace: redis-enterprise
+  apiFqdnUrl: api-gcp.redis.example.com
+  dbFqdnSuffix: .db-gcp.redis.example.com
+  secretName: rerc-gcp-secret
+
+---
+# REAADB multi-cloud
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseActiveActiveDatabase
+metadata:
+  name: multicloud-aadb
+  namespace: redis-enterprise
+spec:
+  participatingClusters:
+    - name: rerc-aws
+    - name: rerc-azure
+    - name: rerc-gcp
+  
+  globalConfigurations:
+    memorySize: 10GB
+    replication: true
+    persistence: aofEveryOneSec
+    databasePort: 12000
+

@@ -1,0 +1,181 @@
+# ============================================================================
+# RDI Helm Values - OpenShift Configuration
+# ============================================================================
+#
+# OpenShift-specific configuration with Security Context Constraints (SCCs)
+#
+# ⚠️ CRITICAL: OpenShift SCCs do not allow runAsUser: 1000 by default
+# You MUST set runAsUser and runAsGroup to values in your project's range
+#
+# Find your project's user/group ranges:
+# oc get projects <rdi-project-name> -o yaml | grep "openshift.io/sa.scc"
+#
+# Example output:
+#   openshift.io/sa.scc.uid-range: 1000700000/10000
+#   openshift.io/sa.scc.supplemental-groups: 1000700000/10000
+#
+# In this example, valid runAsUser values are: 1000700000 to 1000709999
+# ============================================================================
+
+# ============================================================================
+# RDI Database Connection
+# ============================================================================
+connection:
+  host: "rdi-database.redis-enterprise.svc.cluster.local"
+  port: 12100
+  password: "CHANGE_ME"
+  
+  ssl:
+    enabled: true
+    cacert: |
+      -----BEGIN CERTIFICATE-----
+      CHANGE_ME
+      -----END CERTIFICATE-----
+
+# ============================================================================
+# RDI API Configuration
+# ============================================================================
+api:
+  jwtKey: "CHANGE_ME_GENERATE_WITH_URANDOM"
+  service:
+    type: ClusterIP
+    port: 8080
+
+# ============================================================================
+# Global Settings - OpenShift Specific
+# ============================================================================
+global:
+  # ⚠️ CRITICAL: Set to true for OpenShift
+  openShift: true
+  
+  image:
+    registry: docker.io
+    repository: redis
+    pullPolicy: IfNotPresent
+  
+  # ⚠️ CRITICAL: Security Context for OpenShift
+  # You MUST change these values to match your OpenShift project's SCC ranges
+  securityContext:
+    runAsNonRoot: true
+    # Example values - CHANGE THESE to match your project's ranges
+    # Get ranges with: oc get projects <project-name> -o yaml | grep "openshift.io/sa.scc"
+    runAsUser: 1000700000      # CHANGE ME - must be in your project's uid-range
+    runAsGroup: 1000700000     # CHANGE ME - must be in your project's supplemental-groups
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false  # OpenShift may require this to be false
+    capabilities:
+      drop:
+        - ALL
+
+# ============================================================================
+# Metrics Exporter
+# ============================================================================
+metricExporter:
+  enabled: true
+  service:
+    type: ClusterIP
+    port: 8081
+
+# ============================================================================
+# OpenShift Routes (instead of Ingress)
+# ============================================================================
+# OpenShift uses Routes instead of Ingress
+# Create Route manually after installation:
+#
+# oc create route edge rdi-api \
+#   --service=rdi-api \
+#   --port=8080 \
+#   --hostname=rdi-api.apps.your-cluster.com \
+#   -n rdi
+#
+# Or apply this YAML:
+---
+# apiVersion: route.openshift.io/v1
+# kind: Route
+# metadata:
+#   name: rdi-api
+#   namespace: rdi
+#   labels:
+#     app: rdi
+# spec:
+#   host: rdi-api.apps.your-cluster.com
+#   port:
+#     targetPort: 8080
+#   tls:
+#     termination: edge
+#     insecureEdgeTerminationPolicy: Redirect
+#   to:
+#     kind: Service
+#     name: rdi-api
+#     weight: 100
+#   wildcardPolicy: None
+
+# ============================================================================
+# Resource Limits
+# ============================================================================
+resources:
+  api:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  
+  operator:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  
+  metricExporter:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+# ============================================================================
+# Collector and Processor
+# ============================================================================
+collector:
+  enabled: true
+
+processor:
+  enabled: true
+
+reloader:
+  enabled: true
+
+# ============================================================================
+# Installation Instructions for OpenShift
+# ============================================================================
+# 1. Find your project's SCC ranges:
+#    oc get projects rdi -o yaml | grep "openshift.io/sa.scc"
+#
+# 2. Update runAsUser and runAsGroup in this file
+#
+# 3. Install RDI:
+#    helm upgrade --install rdi rdi-1.15.1.tgz \
+#      -f 04-rdi-values-openshift.yaml \
+#      -n rdi \
+#      --create-namespace
+#
+# 4. Create Route for RDI API:
+#    oc create route edge rdi-api \
+#      --service=rdi-api \
+#      --port=8080 \
+#      --hostname=rdi-api.apps.your-cluster.com \
+#      -n rdi
+#
+# 5. Verify installation:
+#    oc get pods -n rdi
+#    oc get route rdi-api -n rdi
+#
+# 6. Test RDI API:
+#    RDI_URL=$(oc get route rdi-api -n rdi -o jsonpath='{.spec.host}')
+#    curl https://$RDI_URL/health
+

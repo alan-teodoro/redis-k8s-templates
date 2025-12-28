@@ -1,0 +1,167 @@
+# ============================================================================
+# RDI ServiceMonitor - Prometheus Operator
+# ============================================================================
+#
+# Configures Prometheus to scrape RDI metrics from:
+# 1. Collector metrics: /metrics/collector-source
+# 2. Stream processor metrics: /metrics/rdi
+#
+# Prerequisites:
+# - Prometheus Operator installed
+# - RDI metric exporter service running
+#
+# ============================================================================
+
+---
+# ServiceMonitor for RDI Collector Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rdi-collector-metrics
+  namespace: rdi
+  labels:
+    app: rdi
+    component: collector
+    release: prometheus  # Match your Prometheus Operator release label
+spec:
+  # Select RDI metric exporter service
+  selector:
+    matchLabels:
+      app: rdi
+      component: metric-exporter
+  
+  # Namespace where RDI is deployed
+  namespaceSelector:
+    matchNames:
+      - rdi
+  
+  # Scrape collector metrics endpoint
+  endpoints:
+    - port: metrics  # or use targetPort: 8081
+      path: /metrics/collector-source
+      interval: 30s
+      scrapeTimeout: 10s
+      scheme: http
+      
+      # Relabeling
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+      
+      # Metric relabeling
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: 'rdi_collector_.*'
+          action: keep
+
+---
+# ServiceMonitor for RDI Stream Processor Metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rdi-processor-metrics
+  namespace: rdi
+  labels:
+    app: rdi
+    component: processor
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: rdi
+      component: metric-exporter
+  
+  namespaceSelector:
+    matchNames:
+      - rdi
+  
+  # Scrape processor metrics endpoint
+  endpoints:
+    - port: metrics
+      path: /metrics/rdi
+      interval: 30s
+      scrapeTimeout: 10s
+      scheme: http
+      
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+      
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: 'rdi_.*|incoming_records_.*|processed_records_.*|rejected_records_.*|filtered_records_.*|monitor_time_.*'
+          action: keep
+
+---
+# PodMonitor (alternative if using pods directly)
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: rdi-metrics
+  namespace: rdi
+  labels:
+    app: rdi
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: rdi-metric-exporter
+  
+  namespaceSelector:
+    matchNames:
+      - rdi
+  
+  podMetricsEndpoints:
+    # Collector metrics
+    - port: metrics
+      path: /metrics/collector-source
+      interval: 30s
+      scrapeTimeout: 10s
+    
+    # Processor metrics
+    - port: metrics
+      path: /metrics/rdi
+      interval: 30s
+      scrapeTimeout: 10s
+
+---
+# Verification Commands
+# ============================================================================
+# 1. Apply ServiceMonitor:
+#    kubectl apply -f 01-servicemonitor.yaml
+#
+# 2. Check ServiceMonitor:
+#    kubectl get servicemonitor -n rdi
+#    kubectl describe servicemonitor rdi-collector-metrics -n rdi
+#
+# 3. Verify Prometheus targets:
+#    # Port-forward to Prometheus
+#    kubectl port-forward -n monitoring svc/prometheus-operated 9090:9090
+#    
+#    # Open browser: http://localhost:9090/targets
+#    # Look for: rdi/rdi-collector-metrics/0 and rdi/rdi-processor-metrics/0
+#
+# 4. Test metrics in Prometheus:
+#    # Collector metrics
+#    rdi_collector_Connected
+#    rdi_collector_TotalNumberOfEventsSeen
+#    
+#    # Processor metrics
+#    rdi_engine_state
+#    processed_records_total
+#    rejected_records_total
+#
+# 5. Check metric exporter directly:
+#    kubectl port-forward -n rdi svc/rdi-metric-exporter 8081:8081
+#    curl http://localhost:8081/metrics/collector-source
+#    curl http://localhost:8081/metrics/rdi
+# ============================================================================
+

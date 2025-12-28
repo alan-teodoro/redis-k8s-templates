@@ -1,0 +1,88 @@
+# StorageClass for Redis on Flash - AWS EBS gp3
+#
+# Este StorageClass usa AWS EBS gp3 volumes para Redis on Flash.
+# gp3 oferece melhor performance e custo vs. gp2.
+#
+# Características:
+#   - Provisioner: AWS EBS CSI Driver
+#   - Type: gp3 (General Purpose SSD v3)
+#   - IOPS: 16000 (configurável)
+#   - Throughput: 1000 MB/s (configurável)
+#   - Reclaim Policy: Delete
+#
+# Uso:
+#   kubectl apply -f 01-storage-class-aws.yaml
+
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: redis-flash-gp3
+  labels:
+    app: redis-enterprise
+    storage-type: flash
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  
+  # IOPS provisionados (3000-16000)
+  # Recomendado: 16000 para máxima performance
+  iops: "16000"
+  
+  # Throughput em MB/s (125-1000)
+  # Recomendado: 1000 para máxima performance
+  throughput: "1000"
+  
+  # Filesystem type
+  fsType: ext4
+  
+  # Encryption habilitado
+  encrypted: "true"
+
+# Reclaim policy: Delete (volumes deletados quando PVC é deletado)
+reclaimPolicy: Delete
+
+# Volume binding mode: WaitForFirstConsumer
+# Garante que volume é criado na mesma AZ do pod
+volumeBindingMode: WaitForFirstConsumer
+
+# Permite expansão de volumes
+allowVolumeExpansion: true
+
+---
+# StorageClass alternativo com io2 (para workloads críticos)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: redis-flash-io2
+  labels:
+    app: redis-enterprise
+    storage-type: flash-premium
+provisioner: ebs.csi.aws.com
+parameters:
+  type: io2
+  iops: "64000"  # io2 suporta até 64000 IOPS
+  fsType: ext4
+  encrypted: "true"
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+
+---
+# StorageClass para instance store (SSD local - máxima performance)
+# Requer nodes i3, i3en, i4i com SSD local
+# ATENÇÃO: Dados são perdidos se node falhar (use com replicação)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: redis-flash-local-ssd
+  labels:
+    app: redis-enterprise
+    storage-type: flash-local
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+
+# Para usar local SSD, você precisa criar LocalPersistentVolumes manualmente
+# ou usar um provisioner como local-volume-provisioner
+

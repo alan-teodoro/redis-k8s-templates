@@ -1,0 +1,146 @@
+# ============================================================================
+# RedisInsight Deployment - Persistent Storage (Production)
+# ============================================================================
+#
+# Use this for production environments where RedisInsight data (connections,
+# settings, history) should persist across pod restarts.
+#
+# Includes:
+# - PersistentVolumeClaim for data storage
+# - Init container to set correct permissions
+# - Recreate strategy (required for RWO volumes)
+# ============================================================================
+
+---
+# PersistentVolumeClaim for RedisInsight data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redisinsight-pvc
+  namespace: redis-enterprise
+  labels:
+    app: redisinsight
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: default  # Change to your storage class
+
+---
+# RedisInsight Deployment with Persistent Storage
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redisinsight
+  namespace: redis-enterprise
+  labels:
+    app: redisinsight
+    component: management-ui
+spec:
+  replicas: 1
+  
+  # Recreate strategy required for ReadWriteOnce volumes
+  strategy:
+    type: Recreate
+  
+  selector:
+    matchLabels:
+      app: redisinsight
+  
+  template:
+    metadata:
+      labels:
+        app: redisinsight
+        component: management-ui
+    spec:
+      # Init container to set correct permissions
+      initContainers:
+      - name: init-permissions
+        image: busybox:latest
+        command:
+          - /bin/sh
+          - '-c'
+          - |
+            chown -R 1000:1000 /data
+            chmod -R 755 /data
+        volumeMounts:
+        - name: redisinsight-data
+          mountPath: /data
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+      
+      # RedisInsight container
+      containers:
+      - name: redisinsight
+        image: redis/redisinsight:latest
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - containerPort: 5540
+          name: http
+          protocol: TCP
+        
+        # Environment variables
+        env:
+        - name: RI_APP_HOST
+          value: "0.0.0.0"
+        - name: RI_APP_PORT
+          value: "5540"
+        
+        # Volume mounts
+        volumeMounts:
+        - name: redisinsight-data
+          mountPath: /data
+        
+        # Resource limits
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        
+        # Security context
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /api/health/
+            port: 5540
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /api/health/
+            port: 5540
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      
+      # Volumes
+      volumes:
+      - name: redisinsight-data
+        persistentVolumeClaim:
+          claimName: redisinsight-pvc
+

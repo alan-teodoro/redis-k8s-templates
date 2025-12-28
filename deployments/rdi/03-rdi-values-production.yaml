@@ -1,0 +1,234 @@
+# ============================================================================
+# RDI Helm Values - Production Configuration
+# ============================================================================
+#
+# Production-ready configuration with:
+# - TLS/mTLS enabled
+# - High availability
+# - Resource limits
+# - Monitoring enabled
+# - Security hardening
+#
+# Installation:
+# helm upgrade --install rdi rdi-1.15.1.tgz \
+#   -f 03-rdi-values-production.yaml \
+#   -n rdi \
+#   --create-namespace \
+#   --set-file connection.ssl.cacert=ca.crt \
+#   --set-file connection.ssl.cert=client.crt \
+#   --set-file connection.ssl.key=client.key
+# ============================================================================
+
+# ============================================================================
+# RDI Database Connection with TLS
+# ============================================================================
+connection:
+  host: "rdi-database.redis-enterprise.svc.cluster.local"
+  port: 12100
+  password: "CHANGE_ME"
+  
+  # TLS configuration (REQUIRED for production)
+  ssl:
+    enabled: true
+    # CA certificate (use --set-file or paste content here)
+    cacert: |
+      -----BEGIN CERTIFICATE-----
+      CHANGE_ME
+      -----END CERTIFICATE-----
+    
+    # Client certificate for mTLS (optional but recommended)
+    cert: |
+      -----BEGIN CERTIFICATE-----
+      CHANGE_ME
+      -----END CERTIFICATE-----
+    
+    # Client private key for mTLS
+    key: |
+      -----BEGIN PRIVATE KEY-----
+      CHANGE_ME
+      -----END PRIVATE KEY-----
+
+# ============================================================================
+# RDI API Configuration
+# ============================================================================
+api:
+  jwtKey: "CHANGE_ME_GENERATE_WITH_URANDOM"
+  
+  service:
+    type: ClusterIP
+    port: 8080
+  
+  # Replicas for high availability
+  replicas: 2
+  
+  # Pod anti-affinity (spread across nodes)
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - rdi-api
+            topologyKey: kubernetes.io/hostname
+
+# ============================================================================
+# Global Settings
+# ============================================================================
+global:
+  image:
+    registry: docker.io
+    repository: redis
+    pullPolicy: IfNotPresent
+  
+  openShift: false
+  
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+# ============================================================================
+# Metrics Exporter (Prometheus)
+# ============================================================================
+metricExporter:
+  enabled: true
+  service:
+    type: ClusterIP
+    port: 8081
+  
+  # ServiceMonitor for Prometheus Operator
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    labels:
+      release: prometheus
+
+# ============================================================================
+# Ingress (NGINX Ingress Controller)
+# ============================================================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  hosts:
+    - host: rdi-api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: rdi-api-tls
+      hosts:
+        - rdi-api.example.com
+
+# ============================================================================
+# Resource Limits (Production)
+# ============================================================================
+resources:
+  api:
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+  
+  operator:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  
+  metricExporter:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  
+  collector:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+  
+  processor:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+
+# ============================================================================
+# Collector Configuration
+# ============================================================================
+collector:
+  enabled: true
+  replicas: 1  # CDC collectors should not be scaled horizontally
+  
+  # Persistent volume for collector state
+  persistence:
+    enabled: true
+    storageClass: gp3
+    size: 10Gi
+
+# ============================================================================
+# Processor Configuration
+# ============================================================================
+processor:
+  enabled: true
+  replicas: 2  # Can be scaled for higher throughput
+  
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - rdi-processor
+            topologyKey: kubernetes.io/hostname
+
+# ============================================================================
+# Reloader
+# ============================================================================
+reloader:
+  enabled: true
+
+# ============================================================================
+# Pod Disruption Budget
+# ============================================================================
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# ============================================================================
+# Network Policies
+# ============================================================================
+networkPolicy:
+  enabled: true
+  policyTypes:
+    - Ingress
+    - Egress
+

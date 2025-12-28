@@ -1,0 +1,140 @@
+# ============================================================================
+# RDI API - NGINX Ingress Configuration
+# ============================================================================
+#
+# Exposes RDI API via NGINX Ingress Controller
+#
+# Prerequisites:
+# 1. NGINX Ingress Controller installed
+# 2. cert-manager installed (for TLS)
+# 3. DNS record pointing to ingress controller
+#
+# ============================================================================
+
+---
+# Ingress for RDI API
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rdi-api
+  namespace: rdi
+  labels:
+    app: rdi
+    component: api
+  annotations:
+    # NGINX Ingress annotations
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    
+    # cert-manager annotation for automatic TLS
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    
+    # Timeouts for long-running operations
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    
+    # Body size limit (for large pipeline configurations)
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  ingressClassName: nginx
+  
+  tls:
+    - hosts:
+        - rdi-api.example.com
+      secretName: rdi-api-tls
+  
+  rules:
+    - host: rdi-api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rdi-api
+                port:
+                  number: 8080
+
+---
+# Ingress for RDI Metrics (Prometheus)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rdi-metrics
+  namespace: rdi
+  labels:
+    app: rdi
+    component: metrics
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    
+    # Basic auth for metrics endpoint (optional but recommended)
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: rdi-metrics-auth
+    nginx.ingress.kubernetes.io/auth-realm: "RDI Metrics - Authentication Required"
+spec:
+  ingressClassName: nginx
+  
+  tls:
+    - hosts:
+        - rdi-metrics.example.com
+      secretName: rdi-metrics-tls
+  
+  rules:
+    - host: rdi-metrics.example.com
+      http:
+        paths:
+          - path: /metrics
+            pathType: Prefix
+            backend:
+              service:
+                name: rdi-metric-exporter
+                port:
+                  number: 8081
+
+---
+# Basic Auth Secret for Metrics (optional)
+# Create with: htpasswd -c auth prometheus
+# kubectl create secret generic rdi-metrics-auth --from-file=auth -n rdi
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rdi-metrics-auth
+  namespace: rdi
+type: Opaque
+stringData:
+  # Username: prometheus, Password: changeme
+  # Generate with: htpasswd -nb prometheus changeme
+  auth: |
+    prometheus:$apr1$xyz123$abcdefghijklmnopqrstuvw
+
+---
+# Verification Commands
+# ============================================================================
+# 1. Apply ingress:
+#    kubectl apply -f 06-ingress-nginx.yaml
+#
+# 2. Check ingress:
+#    kubectl get ingress -n rdi
+#    kubectl describe ingress rdi-api -n rdi
+#
+# 3. Wait for TLS certificate:
+#    kubectl get certificate -n rdi
+#    kubectl describe certificate rdi-api-tls -n rdi
+#
+# 4. Test RDI API:
+#    curl https://rdi-api.example.com/health
+#
+# 5. Test metrics endpoint:
+#    curl -u prometheus:changeme https://rdi-metrics.example.com/metrics/collector-source
+#    curl -u prometheus:changeme https://rdi-metrics.example.com/metrics/rdi
+#
+# 6. Add to Redis Insight:
+#    - Open Redis Insight
+#    - Go to RDI section
+#    - Add connection: https://rdi-api.example.com
+# ============================================================================
+

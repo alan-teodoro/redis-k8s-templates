@@ -47,23 +47,25 @@ Active-Active deployment provides:
 
 ```
 active-active/
-├── README.md                      # This file
-├── cluster-a/                     # Cluster A configurations
-│   ├── 00-namespace.yaml          # Namespace
-│   ├── 01-rec-admin-secret.yaml   # Admin credentials
-│   ├── 02-rbac-rack-awareness.yaml # RBAC for rack awareness
-│   ├── 03-rec.yaml                # Redis Enterprise Cluster
-│   ├── 04-rerc-secrets.yaml       # Remote cluster secrets
-│   ├── 05-rerc.yaml               # Remote cluster definitions
-│   ├── 06-reaadb-secret.yaml      # Database password
-│   └── 07-reaadb.yaml             # Active-Active database
-└── cluster-b/                     # Cluster B configurations
+├── README.md                          # This file
+├── 08-remote-cluster-api-guide.md     # RERC detailed documentation
+├── 09-rerc-advanced-examples.yaml     # Advanced RERC examples (multi-region, hybrid cloud)
+├── cluster-a/                         # Cluster A configurations
+│   ├── 00-namespace.yaml              # Namespace
+│   ├── 01-rec-admin-secret.yaml       # Admin credentials
+│   ├── 02-rbac-rack-awareness.yaml    # RBAC for rack awareness
+│   ├── 03-rec.yaml                    # Redis Enterprise Cluster
+│   ├── 04-rerc-secrets.yaml           # Remote cluster secrets
+│   ├── 05-rerc.yaml                   # Remote cluster definitions (RERC)
+│   ├── 06-reaadb-secret.yaml          # Database password
+│   └── 07-reaadb.yaml                 # Active-Active database
+└── cluster-b/                         # Cluster B configurations
     ├── 00-namespace.yaml
     ├── 01-rec-admin-secret.yaml
     ├── 02-rbac-rack-awareness.yaml
     ├── 03-rec.yaml
     ├── 04-rerc-secrets.yaml
-    ├── 05-rerc.yaml
+    ├── 05-rerc.yaml                   # Remote cluster definitions (RERC)
     └── 06-reaadb-secret.yaml
 ```
 
@@ -327,10 +329,38 @@ kubectl delete -f cluster-b/00-namespace.yaml
 
 ---
 
+## 🔗 Remote Cluster API (RERC)
+
+### O que é RERC?
+
+**RedisEnterpriseRemoteCluster (RERC)** é o Custom Resource que define a conexão entre clusters Redis Enterprise para Active-Active replication.
+
+### Documentação Detalhada
+
+Para informações completas sobre RERC, incluindo:
+- Arquitetura e fluxo de comunicação
+- Configurações avançadas
+- Casos de uso (multi-region, hybrid cloud, etc.)
+- Troubleshooting
+
+Veja: **[08-remote-cluster-api-guide.md](./08-remote-cluster-api-guide.md)**
+
+### Exemplos Avançados
+
+Para exemplos de configurações avançadas:
+- Multi-Region (3+ regiões)
+- Hybrid Cloud (AWS + Azure + GCP)
+- Multi-Cluster HA
+
+Veja: **[09-rerc-advanced-examples.yaml](./09-rerc-advanced-examples.yaml)**
+
+---
+
 ## 📚 Additional Resources
 
 - [Active-Active Geo-Distribution](https://redis.io/docs/latest/operate/rs/databases/active-active/)
 - [CRDT Documentation](https://redis.io/docs/latest/operate/rs/databases/active-active/develop/)
+- [RERC API Reference](https://redis.io/docs/latest/operate/kubernetes/reference/yaml/redis-enterprise-remote-cluster/)
 - [Network Requirements](https://redis.io/docs/latest/operate/rs/networking/port-configurations/)
 - [Networking Configuration](../networking/README.md)
 

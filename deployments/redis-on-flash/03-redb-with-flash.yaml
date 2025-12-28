@@ -1,0 +1,139 @@
+# Redis Enterprise Database with Redis on Flash
+#
+# REDB configurado para usar Redis on Flash com ratio 1:10 (RAM:Flash).
+#
+# Características:
+#   - 10GB RAM (hot data)
+#   - 100GB Flash (warm data)
+#   - Total capacity: 110GB
+#   - Replicação habilitada
+#   - Persistência AOF
+#
+# Uso:
+#   kubectl apply -f 03-redb-with-flash.yaml
+
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: flash-db-1
+  namespace: redis-enterprise
+  labels:
+    app: redis-database
+    storage-type: flash
+spec:
+  # Nome do REC que gerencia este REDB
+  redisEnterpriseCluster:
+    name: redis-enterprise-flash
+
+  # Memória RAM para hot data
+  memorySize: 10GB
+
+  # Configuração de Redis on Flash
+  redisOnFlashSpec:
+    # Habilita Redis on Flash para este database
+    enabled: true
+    
+    # Tamanho do Flash/SSD para warm data
+    # Recomendado: 5-10x o tamanho da RAM
+    flashDiskSize: 100GB
+
+  # Replicação habilitada para alta disponibilidade
+  replication: true
+
+  # Persistência AOF (Append-Only File) a cada 1 segundo
+  persistence: aofEveryOneSec
+
+  # Política de eviction: volatile-lru
+  # Remove chaves voláteis (com TTL) menos usadas quando memória está cheia
+  evictionPolicy: volatile-lru
+
+  # Porta do database
+  databasePort: 12000
+
+  # Módulos Redis (todos built-in no Redis Enterprise 8.0)
+  modulesList:
+    - name: RedisJSON
+    - name: RediSearch
+    - name: RedisTimeSeries
+    - name: RedisBloom
+
+  # TLS habilitado para conexões seguras
+  tlsMode: enabled
+
+  # Sharding (opcional - para datasets muito grandes)
+  # shardCount: 3
+
+  # Backup configuration (opcional)
+  # backup:
+  #   interval: 24h
+  #   s3:
+  #     bucketName: redis-backups
+  #     subdir: flash-db-1
+
+---
+# Exemplo 2: Session Store com ratio 1:9 (mais Flash)
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: flash-sessions
+  namespace: redis-enterprise
+  labels:
+    app: redis-database
+    storage-type: flash
+    use-case: session-store
+spec:
+  redisEnterpriseCluster:
+    name: redis-enterprise-flash
+
+  # 5GB RAM para sessões ativas
+  memorySize: 5GB
+
+  redisOnFlashSpec:
+    enabled: true
+    # 45GB Flash para sessões inativas (ratio 1:9)
+    flashDiskSize: 45GB
+
+  replication: true
+  persistence: aofEveryOneSec
+  evictionPolicy: volatile-lru
+  databasePort: 12001
+  tlsMode: enabled
+
+---
+# Exemplo 3: Time-Series com ratio 1:10 (máximo Flash)
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: flash-timeseries
+  namespace: redis-enterprise
+  labels:
+    app: redis-database
+    storage-type: flash
+    use-case: time-series
+spec:
+  redisEnterpriseCluster:
+    name: redis-enterprise-flash
+
+  # 20GB RAM para dados recentes
+  memorySize: 20GB
+
+  redisOnFlashSpec:
+    enabled: true
+    # 200GB Flash para dados históricos (ratio 1:10)
+    flashDiskSize: 200GB
+
+  replication: true
+  persistence: aofEveryOneSec
+  evictionPolicy: allkeys-lru
+  databasePort: 12002
+  
+  modulesList:
+    - name: RedisTimeSeries
+    - name: RedisJSON
+  
+  tlsMode: enabled
+  
+  # Sharding para melhor performance com datasets grandes
+  shardCount: 3
+

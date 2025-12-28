@@ -1,0 +1,86 @@
+# ============================================================================
+# RedisInsight Deployment - Ephemeral Storage (Dev/Test)
+# ============================================================================
+#
+# Use this for development and testing environments where data persistence
+# is not required. All RedisInsight data (connections, settings) will be
+# lost when the pod restarts.
+#
+# For production, use 02-deployment-persistent.yaml instead.
+# ============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redisinsight
+  namespace: redis-enterprise
+  labels:
+    app: redisinsight
+    component: management-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redisinsight
+  template:
+    metadata:
+      labels:
+        app: redisinsight
+        component: management-ui
+    spec:
+      containers:
+      - name: redisinsight
+        image: redis/redisinsight:latest
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - containerPort: 5540
+          name: http
+          protocol: TCP
+        
+        # Environment variables
+        env:
+        - name: RI_APP_HOST
+          value: "0.0.0.0"
+        - name: RI_APP_PORT
+          value: "5540"
+        
+        # Volume mounts
+        volumeMounts:
+        - name: redisinsight-data
+          mountPath: /data
+        
+        # Resource limits
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /api/health/
+            port: 5540
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /api/health/
+            port: 5540
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      
+      # Volumes
+      volumes:
+      - name: redisinsight-data
+        emptyDir: {}  # Ephemeral storage - data lost on pod restart
+

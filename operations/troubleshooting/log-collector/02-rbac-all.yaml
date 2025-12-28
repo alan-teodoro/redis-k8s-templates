@@ -1,0 +1,189 @@
+# RBAC for Log Collector - All Mode
+# 
+# Este RBAC fornece permissões completas para executar o log collector em modo "all"
+# (coleta TODOS os recursos do namespace)
+#
+# ⚠️ ATENÇÃO: Este RBAC concede permissões amplas. Use apenas quando necessário.
+#
+# Uso:
+#   kubectl apply -f 02-rbac-all.yaml
+#   kubectl create clusterrolebinding log-collector-all-binding \
+#     --clusterrole=redis-log-collector-all \
+#     --user=<seu-usuario>
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: redis-log-collector-all
+rules:
+  # Permissões para ler TODOS os recursos core
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+      - persistentvolumes
+      - events
+      - nodes
+      - namespaces
+      - serviceaccounts
+      - resourcequotas
+      - limitranges
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler recursos de apps
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - statefulsets
+      - replicasets
+      - daemonsets
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler recursos de batch
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler recursos de networking
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - networkpolicies
+      - ingressclasses
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler recursos de storage
+  - apiGroups: ["storage.k8s.io"]
+    resources:
+      - storageclasses
+      - volumeattachments
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler recursos de RBAC
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - roles
+      - rolebindings
+      - clusterroles
+      - clusterrolebindings
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler Custom Resources do Redis Enterprise
+  - apiGroups: ["app.redislabs.com"]
+    resources:
+      - redisenterpriseclusters
+      - redisenterprisedatabases
+      - redisenterpriseremoteclusters
+      - redisenterpriseactiveactivedatabases
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler recursos de policy
+  - apiGroups: ["policy"]
+    resources:
+      - poddisruptionbudgets
+      - podsecuritypolicies
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler recursos de autoscaling
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler recursos de admissionregistration
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources:
+      - validatingwebhookconfigurations
+      - mutatingwebhookconfigurations
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler recursos de apiextensions (CRDs)
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources:
+      - customresourcedefinitions
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler recursos de cert-manager (se instalado)
+  - apiGroups: ["cert-manager.io"]
+    resources:
+      - certificates
+      - certificaterequests
+      - issuers
+      - clusterissuers
+    verbs:
+      - get
+      - list
+
+  # Permissões para ler recursos de Istio (se --collect_istio for usado)
+  - apiGroups: ["networking.istio.io"]
+    resources:
+      - virtualservices
+      - destinationrules
+      - gateways
+      - serviceentries
+    verbs:
+      - get
+      - list
+
+  - apiGroups: ["security.istio.io"]
+    resources:
+      - peerauthentications
+      - requestauthentications
+      - authorizationpolicies
+    verbs:
+      - get
+      - list
+
+---
+# ServiceAccount para o log collector (opcional)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-log-collector-all
+  namespace: redis-enterprise
+
+---
+# ClusterRoleBinding para o ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: redis-log-collector-all-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: redis-log-collector-all
+subjects:
+  - kind: ServiceAccount
+    name: redis-log-collector-all
+    namespace: redis-enterprise
+

@@ -1,0 +1,34 @@
+# ============================================================================
+# RedisInsight Service - ClusterIP
+# ============================================================================
+#
+# Exposes RedisInsight only within the cluster.
+# Use with:
+# - kubectl port-forward
+# - Ingress controller
+# - Gateway API
+#
+# Note: Service name is 'redisinsight-service' (not 'redisinsight') to avoid
+# conflicts with environment variables created by K8s service discovery.
+# ============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redisinsight-service
+  namespace: redis-enterprise
+  labels:
+    app: redisinsight
+    component: management-ui
+spec:
+  type: ClusterIP
+  
+  ports:
+  - port: 80
+    targetPort: 5540
+    protocol: TCP
+    name: http
+  
+  selector:
+    app: redisinsight
+

@@ -1,0 +1,201 @@
+# ============================================================================
+# RDI Prometheus Rules - Alerting Rules
+# ============================================================================
+#
+# CRITICAL ALERTS ONLY (3 alerts):
+# 1. RDI Collector Disconnected
+# 2. RDI Processing Errors
+# 3. RDI Snapshot Failed
+#
+# All other metrics should be monitored via dashboards, not alerts.
+#
+# ============================================================================
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rdi-alerts
+  namespace: rdi
+  labels:
+    app: rdi
+    release: prometheus
+spec:
+  groups:
+    # ========================================================================
+    # CRITICAL ALERTS - Immediate Response Required
+    # ========================================================================
+    - name: rdi.critical
+      interval: 30s
+      rules:
+        # Alert 1: Collector Disconnected
+        - alert: RDICollectorDisconnected
+          expr: rdi_collector_Connected{namespace="rdi"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            component: collector
+          annotations:
+            summary: "RDI Collector disconnected from source database"
+            description: |
+              RDI Collector in namespace {{ $labels.namespace }} is disconnected from the source database.
+              This means RDI cannot capture changes from the source.
+              
+              Current value: {{ $value }}
+              
+              Troubleshooting:
+              1. Check source database connectivity
+              2. Verify source database credentials
+              3. Check network policies
+              4. Review collector logs: kubectl logs -n rdi -l app=rdi-collector
+        
+        # Alert 2: Processing Errors (Collector)
+        - alert: RDICollectorProcessingErrors
+          expr: rate(rdi_collector_NumberOfErroneousEvents{namespace="rdi"}[5m]) > 0
+          for: 2m
+          labels:
+            severity: critical
+            component: collector
+          annotations:
+            summary: "RDI Collector encountering processing errors"
+            description: |
+              RDI Collector is encountering errors while processing events.
+              This indicates data corruption or processing failures.
+              
+              Error rate: {{ $value | humanize }} errors/sec
+              
+              Troubleshooting:
+              1. Check collector logs for error details
+              2. Verify source database schema compatibility
+              3. Check for unsupported data types
+              4. Review pipeline transformation logic
+        
+        # Alert 3: Processing Errors (Processor)
+        - alert: RDIProcessorRejectingRecords
+          expr: rate(rejected_records_total{namespace="rdi"}[5m]) > 0
+          for: 2m
+          labels:
+            severity: critical
+            component: processor
+          annotations:
+            summary: "RDI Processor rejecting records"
+            description: |
+              RDI Stream Processor is rejecting records during processing.
+              This indicates data quality issues or processing failures.
+              
+              Rejection rate: {{ $value | humanize }} records/sec
+              
+              Troubleshooting:
+              1. Check processor logs for rejection reasons
+              2. Verify target Redis database connectivity
+              3. Check transformation logic
+              4. Review data validation rules
+        
+        # Alert 4: Snapshot Failed
+        - alert: RDISnapshotAborted
+          expr: rdi_collector_SnapshotAborted{namespace="rdi"} == 1
+          for: 1m
+          labels:
+            severity: critical
+            component: collector
+          annotations:
+            summary: "RDI Snapshot process aborted"
+            description: |
+              RDI initial snapshot process has been aborted.
+              This means the initial data sync is incomplete.
+              
+              Troubleshooting:
+              1. Check collector logs for abort reason
+              2. Verify source database connectivity
+              3. Check for insufficient resources (CPU/memory)
+              4. Review snapshot configuration
+              5. Consider restarting the pipeline
+        
+        # Alert 5: Engine Not Running
+        - alert: RDIEngineNotRunning
+          expr: rdi_engine_state{namespace="rdi",state!="RUNNING"} == 1
+          for: 5m
+          labels:
+            severity: warning
+            component: processor
+          annotations:
+            summary: "RDI Engine not in RUNNING state"
+            description: |
+              RDI Engine is not in RUNNING state.
+              Current state: {{ $labels.state }}
+              
+              This may be normal during startup or shutdown.
+              If persistent, investigate.
+              
+              Troubleshooting:
+              1. Check processor logs
+              2. Verify RDI database connectivity
+              3. Check pipeline configuration
+              4. Review operator logs
+    
+    # ========================================================================
+    # RECORDING RULES - Pre-computed Metrics for Dashboards
+    # ========================================================================
+    - name: rdi.recording
+      interval: 30s
+      rules:
+        # Collector throughput (events/sec)
+        - record: rdi:collector:events_per_second
+          expr: rate(rdi_collector_TotalNumberOfEventsSeen{namespace="rdi"}[5m])
+        
+        # Collector lag (ms behind source)
+        - record: rdi:collector:lag_milliseconds
+          expr: rdi_collector_MilliSecondsBehindSource{namespace="rdi"}
+        
+        # Processor throughput (records/sec)
+        - record: rdi:processor:records_per_second
+          expr: rdi_processor_rec_per_sec_last{namespace="rdi"}
+        
+        # Processor latency (ms)
+        - record: rdi:processor:latency_milliseconds
+          expr: rdi_stream_event_latency_ms{namespace="rdi"}
+        
+        # Total processed records
+        - record: rdi:processor:total_processed
+          expr: processed_records_total{namespace="rdi"}
+        
+        # Total rejected records
+        - record: rdi:processor:total_rejected
+          expr: rejected_records_total{namespace="rdi"}
+        
+        # Snapshot progress (%)
+        - record: rdi:collector:snapshot_progress_percent
+          expr: |
+            (
+              (rdi_collector_TotalTableCount{namespace="rdi"} - rdi_collector_RemainingTableCount{namespace="rdi"})
+              / rdi_collector_TotalTableCount{namespace="rdi"}
+            ) * 100
+
+---
+# Verification Commands
+# ============================================================================
+# 1. Apply Prometheus rules:
+#    kubectl apply -f 02-prometheus-rules.yaml
+#
+# 2. Check PrometheusRule:
+#    kubectl get prometheusrule -n rdi
+#    kubectl describe prometheusrule rdi-alerts -n rdi
+#
+# 3. Verify rules in Prometheus:
+#    # Port-forward to Prometheus
+#    kubectl port-forward -n monitoring svc/prometheus-operated 9090:9090
+#    
+#    # Open browser: http://localhost:9090/rules
+#    # Look for: rdi.critical and rdi.recording groups
+#
+# 4. Test alerts:
+#    # Open browser: http://localhost:9090/alerts
+#    # Check for RDI alerts
+#
+# 5. Trigger test alert (for testing only):
+#    # Simulate collector disconnect by scaling down collector
+#    kubectl scale deployment rdi-collector --replicas=0 -n rdi
+#    # Wait 1-2 minutes, check alerts
+#    # Restore: kubectl scale deployment rdi-collector --replicas=1 -n rdi
+# ============================================================================
+

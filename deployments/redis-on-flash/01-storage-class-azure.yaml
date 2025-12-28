@@ -1,0 +1,80 @@
+# StorageClass for Redis on Flash - Azure Premium SSD
+#
+# Este StorageClass usa Azure Premium SSD (managed disks) para Redis on Flash.
+#
+# Características:
+#   - Provisioner: Azure Disk CSI Driver
+#   - SKU: Premium_LRS (Premium SSD)
+#   - Reclaim Policy: Delete
+#
+# Uso:
+#   kubectl apply -f 01-storage-class-azure.yaml
+
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: redis-flash-premium-ssd
+  labels:
+    app: redis-enterprise
+    storage-type: flash
+provisioner: disk.csi.azure.com
+parameters:
+  # SKU: Premium_LRS (Premium SSD)
+  # Outras opções: StandardSSD_LRS, UltraSSD_LRS
+  skuName: Premium_LRS
+  
+  # Filesystem type
+  fsType: ext4
+  
+  # Caching mode: ReadOnly para melhor performance de leitura
+  cachingMode: ReadOnly
+
+# Reclaim policy: Delete
+reclaimPolicy: Delete
+
+# Volume binding mode: WaitForFirstConsumer
+volumeBindingMode: WaitForFirstConsumer
+
+# Permite expansão de volumes
+allowVolumeExpansion: true
+
+---
+# StorageClass alternativo com Ultra SSD (para workloads críticos)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: redis-flash-ultra-ssd
+  labels:
+    app: redis-enterprise
+    storage-type: flash-premium
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: UltraSSD_LRS
+  
+  # IOPS provisionados (até 160000)
+  diskIOPSReadWrite: "64000"
+  
+  # Throughput em MB/s (até 4000)
+  diskMBpsReadWrite: "2000"
+  
+  fsType: ext4
+  cachingMode: None  # Ultra SSD não suporta caching
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+
+---
+# StorageClass para local NVMe (Lsv2/Lsv3 series - máxima performance)
+# ATENÇÃO: Dados são perdidos se node falhar (use com replicação)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: redis-flash-local-nvme
+  labels:
+    app: redis-enterprise
+    storage-type: flash-local
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+
