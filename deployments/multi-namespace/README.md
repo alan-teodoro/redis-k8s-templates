@@ -1,54 +1,28 @@
 # Multi-Namespace REDB Deployment
 
-⚠️ **IMPORTANT LIMITATION - NOT SUPPORTED**
+✅ **FULLY SUPPORTED** - Redis Enterprise Operator 6.4.2-4+
 
-**This deployment pattern is NOT currently supported by the Redis Enterprise Operator.**
-
-The Redis Enterprise Operator (as of version 8.0.6-8, December 2025) **does not support managing REDBs across multiple namespaces**. The operator can only watch and manage resources in a single namespace (configured via `WATCH_NAMESPACE` environment variable).
-
-**Attempting to deploy REDBs in namespaces other than the operator's namespace will result in:**
-- REDBs remaining in pending state indefinitely
-- No events or status updates on REDB resources
-- Operator crashes if `WATCH_NAMESPACE` is set to empty string
+This deployment pattern allows a **single Redis Enterprise Operator and REC** to manage databases (REDB/REAADB) across **multiple Kubernetes namespaces**.
 
 ---
 
-## Alternative Approaches
+## ⚠️ Important Notes
 
-If you need namespace isolation for Redis databases, consider these alternatives:
+**Supported Patterns** (same Kubernetes cluster):
+- ✅ Single REC, single namespace (simplest)
+- ✅ **Single REC, multiple namespaces** (this guide)
+- ✅ Multiple RECs, multiple namespaces (one REC per namespace)
 
-### Option 1: Multiple Operator Instances (Recommended)
-Deploy a separate Redis Enterprise Operator and REC in each namespace that needs Redis databases.
+**NOT Supported**:
+- ❌ Multiple RECs in one namespace
+- ❌ Cross-Kubernetes-cluster operations (use Active-Active instead)
 
-**Pros:**
-- Full isolation between namespaces
-- Each namespace has its own operator and cluster
-- Supported configuration
+**Prerequisites**:
+- Redis Enterprise Operator 6.4.2-4 or later (for label-based method)
+- One REC already deployed in a namespace (e.g., `redis-enterprise`)
+- Each consumer namespace must have proper RBAC configured **before** operator watches it
 
-**Cons:**
-- Higher resource usage (multiple operators and RECs)
-- More complex management
-
-### Option 2: Use Labels and RBAC
-Deploy all REDBs in the same namespace (`redis-enterprise`) but use:
-- Kubernetes labels to organize databases by team/environment
-- RBAC to control access to specific REDB resources
-- Naming conventions (e.g., `team-a-prod-db`, `team-b-staging-db`)
-
-**Pros:**
-- Single operator and REC
-- Lower resource usage
-- Simpler management
-
-**Cons:**
-- No namespace-level isolation
-- All databases in same namespace
-
----
-
-## Historical Context (For Reference Only)
-
-The content below describes the **intended** multi-namespace deployment pattern, which is **NOT currently functional** with Redis Enterprise Operator. This documentation is preserved for reference in case future operator versions add this capability.
+⚠️ **CRITICAL**: Only configure the operator to watch a namespace **after** the namespace exists and RBAC (Role + RoleBinding) is applied. Otherwise, the operator will fail and halt normal operations.
 
 ---
 
@@ -183,18 +157,18 @@ You need permissions to:
 
 ## Deployment Guide
 
-### Step 1: Configure RBAC for Multi-Namespace
+There are **two methods** to configure multi-namespace support:
 
-```bash
-# Apply RBAC for operator to manage multiple namespaces
-kubectl apply -f 01-operator-rbac.yaml
-```
+- **Method 1: Label-Based** (Recommended, requires operator 6.4.2-4+)
+- **Method 2: Explicit Namespace List**
 
-This creates:
-- **ClusterRole**: Permissions for operator to list namespaces
-- **ClusterRoleBinding**: Binds ClusterRole to operator ServiceAccount
+---
 
-### Step 2: Create Consumer Namespaces
+### Method 1: Label-Based (Recommended)
+
+This method uses Kubernetes namespace labels to identify which namespaces the operator should manage.
+
+#### Step 1: Create Consumer Namespaces
 
 ```bash
 # Create namespaces for production, staging, and development
@@ -206,18 +180,69 @@ This creates three namespaces:
 - `app-staging`
 - `app-development`
 
-### Step 3: Configure RBAC for Consumer Namespaces
+#### Step 2: Configure RBAC for Consumer Namespaces
+
+⚠️ **CRITICAL**: Apply RBAC **before** configuring operator to watch namespaces.
 
 ```bash
 # Apply RBAC for operator to manage REDBs in consumer namespaces
 kubectl apply -f 03-consumer-rbac.yaml
 ```
 
-This creates for EACH consumer namespace:
-- **Role**: Permissions to manage REDBs, Services, Secrets
-- **RoleBinding**: Binds Role to operator ServiceAccount
+This creates for **each** consumer namespace:
+- **Role**: Permissions to manage REDBs, REAADB, Services, Secrets, Events
+- **RoleBinding**: Binds Role to:
+  - `redis-enterprise-operator` ServiceAccount
+  - `rec` ServiceAccount (REC name)
 
-### Step 4: Deploy REDBs to Consumer Namespaces
+#### Step 3: Configure Operator ClusterRole
+
+```bash
+# Apply ClusterRole for operator to list/watch namespaces
+kubectl apply -f 01-operator-rbac.yaml
+```
+
+This creates:
+- **ClusterRole**: Permissions for operator to list/watch namespaces
+- **ClusterRoleBinding**: Binds ClusterRole to operator ServiceAccount
+
+#### Step 4: Configure Operator to Watch Labeled Namespaces
+
+```bash
+# Patch operator ConfigMap to use label-based watching
+kubectl patch ConfigMap/operator-environment-config \
+  -n redis-enterprise \
+  --type merge \
+  -p '{"data": {"REDB_NAMESPACES_LABEL": "redis-multi-namespace"}}'
+```
+
+⚠️ **Note**: The operator will restart when ConfigMap is updated.
+
+#### Step 5: Label Consumer Namespaces
+
+```bash
+# Label each namespace to be managed by operator
+kubectl label namespace app-production redis-multi-namespace=enabled
+kubectl label namespace app-staging redis-multi-namespace=enabled
+kubectl label namespace app-development redis-multi-namespace=enabled
+```
+
+⚠️ **Note**: The operator restarts when it detects a namespace label was added or removed.
+
+#### Step 6: Verify Operator Configuration
+
+```bash
+# Check operator ConfigMap
+kubectl get configmap operator-environment-config -n redis-enterprise -o yaml | grep REDB_NAMESPACES_LABEL
+
+# Check namespace labels
+kubectl get namespaces --show-labels | grep redis-multi-namespace
+
+# Check operator logs
+kubectl logs -n redis-enterprise deployment/redis-enterprise-operator --tail=50
+```
+
+#### Step 7: Deploy REDBs to Consumer Namespaces
 
 ```bash
 # Deploy production database
@@ -230,7 +255,7 @@ kubectl apply -f 05-redb-staging.yaml
 kubectl apply -f 06-redb-development.yaml
 ```
 
-### Step 5: Verify Deployments
+#### Step 8: Verify Deployments
 
 ```bash
 # Check REDBs in all namespaces
@@ -238,15 +263,75 @@ kubectl get redb -A
 
 # Check production database
 kubectl get redb prod-db -n app-production
+kubectl describe redb prod-db -n app-production
 kubectl get svc prod-db -n app-production
 
 # Check staging database
 kubectl get redb staging-db -n app-staging
-kubectl get svc staging-db -n app-staging
+kubectl describe redb staging-db -n app-staging
 
 # Check development database
 kubectl get redb dev-db -n app-development
-kubectl get svc dev-db -n app-development
+kubectl describe redb dev-db -n app-development
+```
+
+---
+
+### Method 2: Explicit Namespace List
+
+This method uses a comma-separated list of namespaces in the operator ConfigMap.
+
+#### Steps 1-3: Same as Method 1
+
+Follow Steps 1-3 from Method 1 (create namespaces, configure RBAC, configure ClusterRole).
+
+#### Step 4: Configure Operator with Namespace List
+
+```bash
+# Patch operator ConfigMap with explicit namespace list
+kubectl patch ConfigMap/operator-environment-config \
+  -n redis-enterprise \
+  --type merge \
+  -p '{"data":{"REDB_NAMESPACES": "app-production,app-staging,app-development"}}'
+```
+
+⚠️ **Note**: The operator will restart when ConfigMap is updated.
+
+#### Steps 5-6: Deploy and Verify
+
+Follow Steps 7-8 from Method 1 (deploy REDBs and verify).
+
+---
+
+### Adding New Namespaces
+
+#### Method 1 (Label-Based):
+
+```bash
+# Create new namespace
+kubectl create namespace app-testing
+
+# Apply RBAC
+kubectl apply -f 03-consumer-rbac.yaml
+
+# Label namespace
+kubectl label namespace app-testing redis-multi-namespace=enabled
+```
+
+#### Method 2 (Explicit List):
+
+```bash
+# Create new namespace
+kubectl create namespace app-testing
+
+# Apply RBAC
+kubectl apply -f 03-consumer-rbac.yaml
+
+# Update ConfigMap
+kubectl patch ConfigMap/operator-environment-config \
+  -n redis-enterprise \
+  --type merge \
+  -p '{"data":{"REDB_NAMESPACES": "app-production,app-staging,app-development,app-testing"}}'
 ```
 
 ---
@@ -301,7 +386,102 @@ kubectl delete -f 01-operator-rbac.yaml
 
 ## Troubleshooting
 
-See [07-troubleshooting.md](./07-troubleshooting.md) for common issues and solutions.
+### Issue 1: REDB Stuck in Pending State
+
+**Symptoms**:
+- REDB remains in pending state indefinitely
+- No events on REDB resource
+
+**Possible Causes**:
+1. RBAC not configured in consumer namespace
+2. Operator not configured to watch the namespace
+3. Namespace not labeled (Method 1) or not in list (Method 2)
+
+**Solution**:
+```bash
+# Check RBAC in consumer namespace
+kubectl get role,rolebinding -n app-production
+
+# Check operator ConfigMap
+kubectl get configmap operator-environment-config -n redis-enterprise -o yaml
+
+# Check namespace labels (Method 1)
+kubectl get namespace app-production --show-labels
+
+# Check operator logs
+kubectl logs -n redis-enterprise deployment/redis-enterprise-operator --tail=100
+```
+
+### Issue 2: Operator Crashes or Fails
+
+**Symptoms**:
+- Operator pod crashes
+- Operator logs show errors about missing permissions
+
+**Possible Causes**:
+- Operator configured to watch namespace before RBAC was applied
+- Operator configured to watch non-existent namespace
+
+**Solution**:
+```bash
+# Remove namespace from watch list
+kubectl patch ConfigMap/operator-environment-config \
+  -n redis-enterprise \
+  --type merge \
+  -p '{"data":{"REDB_NAMESPACES": ""}}'
+
+# Or remove label
+kubectl label namespace app-production redis-multi-namespace-
+
+# Apply RBAC
+kubectl apply -f 03-consumer-rbac.yaml
+
+# Re-add namespace to watch list
+kubectl label namespace app-production redis-multi-namespace=enabled
+```
+
+### Issue 3: REDB Created but No Service
+
+**Symptoms**:
+- REDB shows as active
+- No service created in consumer namespace
+
+**Possible Causes**:
+- RoleBinding missing permissions for services
+
+**Solution**:
+```bash
+# Check RoleBinding
+kubectl get rolebinding redb-role -n app-production -o yaml
+
+# Verify operator ServiceAccount has permissions
+kubectl auth can-i create services --as=system:serviceaccount:redis-enterprise:redis-enterprise-operator -n app-production
+```
+
+### Issue 4: Multi-Namespace Active-Active (REAADB)
+
+**Additional Requirements for REAADB**:
+1. All participating clusters must watch the consumer namespace
+2. Global database secret must exist in each consumer namespace
+3. REAADB must specify `metadata.namespace` and `spec.participatingClusters[].namespace`
+
+**Example**:
+```yaml
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseActiveActiveDatabase
+metadata:
+  name: consumer-reaadb
+  namespace: app-production  # Consumer namespace
+spec:
+  participatingClusters:
+    - name: rec  # Main cluster
+    - name: rec-peer  # Peer cluster
+      namespace: app-production  # Must match metadata.namespace
+  globalConfigurations:
+    databaseSecretName: global-db-secret  # Must exist in app-production
+```
+
+For more detailed troubleshooting, see [07-troubleshooting.md](./07-troubleshooting.md).
 
 ---
 
