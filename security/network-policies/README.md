@@ -172,12 +172,17 @@ kubectl describe networkpolicy deny-all -n redis-enterprise
 ### Test Connectivity
 
 ```bash
-# Test DNS resolution
-kubectl run -it --rm debug --image=busybox --restart=Never -n redis-enterprise -- nslookup kubernetes.default
+# Label the default namespace to allow client access
+kubectl label namespace default redis-client=true
 
-# Test Redis connection from client namespace
-kubectl run -it --rm redis-cli --image=redis:latest --restart=Never -n default -- \
-  redis-cli -h redis-db.redis-enterprise.svc.cluster.local -p 12000 PING
+# Test Redis connection from client namespace (replace 'test-db' with your database name)
+kubectl run redis-test --rm -it --image=redis:latest --restart=Never -- \
+  redis-cli -h test-db.redis-enterprise.svc.cluster.local -p 12000 --tls --insecure -a RedisAdmin123! PING
+
+# Expected output: PONG
+
+# Find your database service name
+kubectl get svc -n redis-enterprise | grep 12000
 
 # Test blocked traffic (should fail)
 kubectl run -it --rm debug --image=busybox --restart=Never -n redis-enterprise -- \

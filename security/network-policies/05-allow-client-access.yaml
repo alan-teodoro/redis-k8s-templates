@@ -31,17 +31,31 @@ spec:
             matchLabels:
               redis-client: "true"  # Label your client namespaces
       ports:
+        # Common database ports (add more as needed)
         - protocol: TCP
-          port: 10000-20000  # Database ports range
-    
+          port: 12000
+        - protocol: TCP
+          port: 12001
+        - protocol: TCP
+          port: 12002
+        - protocol: TCP
+          port: 12003
+
     # Alternative: Allow from specific namespace by name
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: default
       ports:
+        # Common database ports (add more as needed)
         - protocol: TCP
-          port: 10000-20000
+          port: 12000
+        - protocol: TCP
+          port: 12001
+        - protocol: TCP
+          port: 12002
+        - protocol: TCP
+          port: 12003
     
     # Alternative: Allow from any namespace (NOT RECOMMENDED for production)
     # Uncomment only for testing

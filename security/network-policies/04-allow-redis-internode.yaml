@@ -32,18 +32,64 @@ spec:
             matchLabels:
               app: redis-enterprise
       ports:
-        # Redis Enterprise ports
+        # Redis Enterprise management ports
         - protocol: TCP
-          port: 8001  # Cluster Manager
+          port: 8001  # Discovery Service
         - protocol: TCP
           port: 8070  # Metrics exporter
         - protocol: TCP
-          port: 8443  # API/UI
+          port: 8443  # Management UI (HTTPS)
         - protocol: TCP
           port: 9443  # REST API
+        # Internode communication ports
         - protocol: TCP
-          port: 10000-20000  # Database ports range
-  
+          port: 3333  # Internode
+        - protocol: TCP
+          port: 3334  # Internode
+        - protocol: TCP
+          port: 3335  # Internode
+        - protocol: TCP
+          port: 3336  # Internode
+        - protocol: TCP
+          port: 3337  # Internode
+        - protocol: TCP
+          port: 3338  # Internode
+        - protocol: TCP
+          port: 3339  # Internode
+        - protocol: TCP
+          port: 3340  # Internode
+        - protocol: TCP
+          port: 3341  # Internode
+        - protocol: TCP
+          port: 3342  # Internode
+        - protocol: TCP
+          port: 3343  # Internode
+        - protocol: TCP
+          port: 3344  # Internode
+        - protocol: TCP
+          port: 3345  # Internode
+        - protocol: TCP
+          port: 3350  # Internode
+        - protocol: TCP
+          port: 3351  # Internode
+        - protocol: TCP
+          port: 3352  # Internode
+        - protocol: TCP
+          port: 3353  # Internode
+        - protocol: TCP
+          port: 3354  # Internode
+        - protocol: TCP
+          port: 36379  # Internode
+        # Database ports (common range)
+        - protocol: TCP
+          port: 12000  # Database port
+        - protocol: TCP
+          port: 12001  # Database port
+        - protocol: TCP
+          port: 12002  # Database port
+        - protocol: TCP
+          port: 12003  # Database port
+
   egress:
     # Allow traffic to other Redis Enterprise pods
     - to:
@@ -51,7 +97,7 @@ spec:
             matchLabels:
               app: redis-enterprise
       ports:
-        # Redis Enterprise ports
+        # Redis Enterprise management ports
         - protocol: TCP
           port: 8001
         - protocol: TCP
@@ -60,8 +106,54 @@ spec:
           port: 8443
         - protocol: TCP
           port: 9443
+        # Internode communication ports
         - protocol: TCP
-          port: 10000-20000
+          port: 3333
+        - protocol: TCP
+          port: 3334
+        - protocol: TCP
+          port: 3335
+        - protocol: TCP
+          port: 3336
+        - protocol: TCP
+          port: 3337
+        - protocol: TCP
+          port: 3338
+        - protocol: TCP
+          port: 3339
+        - protocol: TCP
+          port: 3340
+        - protocol: TCP
+          port: 3341
+        - protocol: TCP
+          port: 3342
+        - protocol: TCP
+          port: 3343
+        - protocol: TCP
+          port: 3344
+        - protocol: TCP
+          port: 3345
+        - protocol: TCP
+          port: 3350
+        - protocol: TCP
+          port: 3351
+        - protocol: TCP
+          port: 3352
+        - protocol: TCP
+          port: 3353
+        - protocol: TCP
+          port: 3354
+        - protocol: TCP
+          port: 36379
+        # Database ports (common range)
+        - protocol: TCP
+          port: 12000
+        - protocol: TCP
+          port: 12001
+        - protocol: TCP
+          port: 12002
+        - protocol: TCP
+          port: 12003
 
 ---
 # Verification:
