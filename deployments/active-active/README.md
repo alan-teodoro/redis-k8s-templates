@@ -71,44 +71,217 @@ active-active/
 
 **Note:** Database (REAADB) is created only on Cluster A and automatically replicates to Cluster B.
 
-## 🚀 Deployment Steps
+---
+
+## 🚀 Quick Start
+
+**TL;DR - Complete deployment in 5 steps:**
+
+1. **Install NGINX Ingress** on both clusters
+2. **Install Redis Operator** on both clusters
+3. **Update FQDNs** in YAML files with Ingress IPs
+4. **Deploy RECs** on both clusters
+5. **Configure RERC** and create Active-Active database
+
+**Estimated time:** 30-40 minutes
+
+---
+
+## 📝 Detailed Deployment Guide
 
 ### Prerequisites
 
-1. **Two Kubernetes clusters** with network connectivity between them
-2. **Redis Enterprise Operator** installed in both clusters (see [operator/README.md](../operator/README.md))
-3. **Network connectivity** between clusters (ports 8443, 9443, database ports)
-4. **Admin access** to both clusters
-5. **External access configured** (Ingress/LoadBalancer) for API and database endpoints
+1. **Two Kubernetes clusters** (GKE, EKS, AKS, or on-prem)
+2. **kubectl** configured with contexts for both clusters
+3. **Helm 3.x** installed
+4. **Network connectivity** between clusters (ports 80, 443, 8443, 9443)
+5. **LoadBalancer** support (for Ingress external IPs)
 
-### Pre-Deployment Configuration
+---
 
-**⚠️ IMPORTANT: Update FQDNs for Your Environment**
+## 📝 Step-by-Step Deployment
 
-Before deploying, you **must** update the FQDN (Fully Qualified Domain Name) values in the YAML files to match your environment.
+### Step 0: Install Prerequisites (REQUIRED)
 
-**Files to update:**
+**⚠️ IMPORTANT: Install on BOTH clusters before proceeding!**
 
-1. **Cluster A** (`cluster-a/03-rec.yaml`):
-   - Update `ingressOrRouteSpec.apiFqdnUrl` with your Cluster A API endpoint
-   - Update `ingressOrRouteSpec.dbFqdnSuffix` with your Cluster A database suffix
+#### 0.1: Install NGINX Ingress Controller
 
-2. **Cluster B** (`cluster-b/03-rec.yaml`):
-   - Update `ingressOrRouteSpec.apiFqdnUrl` with your Cluster B API endpoint
-   - Update `ingressOrRouteSpec.dbFqdnSuffix` with your Cluster B database suffix
+**On Cluster A:**
+```bash
+# Set context to Cluster A
+kubectl config use-context <cluster-a-context>
 
-3. **Remote cluster references** (`cluster-a/05-rerc.yaml` and `cluster-b/05-rerc.yaml`):
-   - Update `apiFqdnUrl` and `dbFqdnSuffix` for both clusters
+# Install NGINX Ingress Controller
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
 
-**Example:**
-```yaml
-# cluster-a/03-rec.yaml
-ingressOrRouteSpec:
-  apiFqdnUrl: api-rec-a.redis.example.com
-  dbFqdnSuffix: .db-rec-a.redis.example.com
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace \
+  --set controller.service.type=LoadBalancer \
+  --set controller.extraArgs.enable-ssl-passthrough=true
+
+# Wait for LoadBalancer IP to be assigned
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+
+# Get the Ingress LoadBalancer IP (SAVE THIS!)
+kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 ```
 
-**See:** [../networking/README.md](../networking/README.md) for external access configuration options.
+**On Cluster B:**
+```bash
+# Set context to Cluster B
+kubectl config use-context <cluster-b-context>
+
+# Install NGINX Ingress Controller
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace \
+  --set controller.service.type=LoadBalancer \
+  --set controller.extraArgs.enable-ssl-passthrough=true
+
+# Wait for LoadBalancer IP
+kubectl wait --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s
+
+# Get the Ingress LoadBalancer IP (SAVE THIS!)
+kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+```
+
+**📝 Note the LoadBalancer IPs - you'll need them for the next step!**
+
+---
+
+#### 0.2: Install Redis Enterprise Operator
+
+**On Cluster A:**
+```bash
+# Set context to Cluster A
+kubectl config use-context <cluster-a-context>
+
+# Add Redis Helm repository
+helm repo add redis https://helm.redis.io
+helm repo update
+
+# Install Operator
+helm install redis-operator redis/redis-enterprise-operator \
+  --version 8.0.6-8 \
+  -n redis-enterprise \
+  --create-namespace
+
+# Verify installation
+kubectl get pods -n redis-enterprise
+```
+
+**On Cluster B:**
+```bash
+# Set context to Cluster B
+kubectl config use-context <cluster-b-context>
+
+# Add Redis Helm repository (if not already added)
+helm repo add redis https://helm.redis.io
+helm repo update
+
+# Install Operator
+helm install redis-operator redis/redis-enterprise-operator \
+  --version 8.0.6-8 \
+  -n redis-enterprise \
+  --create-namespace
+
+# Verify installation
+kubectl get pods -n redis-enterprise
+```
+
+**Wait for Operator pods to be Running on both clusters before proceeding.**
+
+---
+
+### Step 1: Configure FQDNs with Ingress LoadBalancer IPs
+
+**⚠️ IMPORTANT: Update FQDNs using the Ingress LoadBalancer IPs from Step 0.1**
+
+Using the LoadBalancer IPs you saved from Step 0.1, update the configuration files.
+
+**Example:** If your IPs are:
+- Cluster A Ingress IP: `104.197.244.251`
+- Cluster B Ingress IP: `34.59.153.207`
+
+#### 1.1: Update Cluster A Configuration
+
+Edit `cluster-a/03-rec.yaml`:
+```yaml
+spec:
+  # ... other config ...
+  ingressOrRouteSpec:
+    apiFqdnUrl: rec-a-api.104.197.244.251.nip.io
+    dbFqdnSuffix: .db-rec-a.104.197.244.251.nip.io
+    method: ingress
+    ingressAnnotations:
+      kubernetes.io/ingress.class: "nginx"
+      nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+```
+
+Edit `cluster-a/05-rerc.yaml`:
+```yaml
+# First RERC (local - Cluster A)
+spec:
+  recName: rec-a
+  apiFqdnUrl: rec-a-api.104.197.244.251.nip.io
+  dbFqdnSuffix: .db-rec-a.104.197.244.251.nip.io
+
+---
+# Second RERC (remote - Cluster B)
+spec:
+  recName: rec-b
+  apiFqdnUrl: rec-b-api.34.59.153.207.nip.io
+  dbFqdnSuffix: .db-rec-b.34.59.153.207.nip.io
+```
+
+#### 1.2: Update Cluster B Configuration
+
+Edit `cluster-b/03-rec.yaml`:
+```yaml
+spec:
+  # ... other config ...
+  ingressOrRouteSpec:
+    apiFqdnUrl: rec-b-api.34.59.153.207.nip.io
+    dbFqdnSuffix: .db-rec-b.34.59.153.207.nip.io
+    method: ingress
+    ingressAnnotations:
+      kubernetes.io/ingress.class: "nginx"
+      nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+```
+
+Edit `cluster-b/05-rerc.yaml`:
+```yaml
+# First RERC (local - Cluster A)
+spec:
+  recName: rec-a
+  apiFqdnUrl: rec-a-api.104.197.244.251.nip.io
+  dbFqdnSuffix: .db-rec-a.104.197.244.251.nip.io
+
+---
+# Second RERC (remote - Cluster B)
+spec:
+  recName: rec-b
+  apiFqdnUrl: rec-b-api.34.59.153.207.nip.io
+  dbFqdnSuffix: .db-rec-b.34.59.153.207.nip.io
+```
+
+**💡 Note:** We're using `nip.io` which is a free DNS service that resolves `*.IP.nip.io` to the IP address. Perfect for demos and testing!
+
+**For production:** Replace with your actual DNS records pointing to the Ingress IPs.
 
 ## 🔐 Default Credentials
 
@@ -124,22 +297,34 @@ ingressOrRouteSpec:
 
 ## 📝 Deployment Instructions
 
-### Step 1: Deploy Redis Enterprise Clusters
+### Step 2: Deploy Redis Enterprise Clusters
+
+**⚠️ Make sure you completed Step 1 (FQDN configuration) before proceeding!**
+
+**📝 Note on Rack Awareness:**
+- If your nodes have `topology.kubernetes.io/zone` labels, you can enable rack awareness by uncommenting the RBAC file and the `rackAwarenessNodeLabel` in `03-rec.yaml`
+- To check: `kubectl get nodes --show-labels | grep topology.kubernetes.io/zone`
+- If nodes don't have zone labels, skip the RBAC file and comment out `rackAwarenessNodeLabel` in the REC spec
 
 **On Cluster A:**
 ```bash
 # Set context to Cluster A
 kubectl config use-context <cluster-a-context>
 
-# Deploy REC
-cd cluster-a/
+# Navigate to cluster-a directory
+cd deployments/active-active/cluster-a/
+
+# Deploy REC (skip RBAC if nodes don't have zone labels)
 kubectl apply -f 00-namespace.yaml
 kubectl apply -f 01-rec-admin-secret.yaml
-kubectl apply -f 02-rbac-rack-awareness.yaml
+# kubectl apply -f 02-rbac-rack-awareness.yaml  # Only if nodes have topology.kubernetes.io/zone labels
 kubectl apply -f 03-rec.yaml
 
 # Wait for cluster ready (5-10 minutes)
 kubectl wait --for=condition=Ready rec/rec-a -n redis-enterprise --timeout=600s
+
+# Verify Ingress was created
+kubectl get ingress -n redis-enterprise
 ```
 
 **On Cluster B:**
@@ -147,91 +332,243 @@ kubectl wait --for=condition=Ready rec/rec-a -n redis-enterprise --timeout=600s
 # Set context to Cluster B
 kubectl config use-context <cluster-b-context>
 
-# Deploy REC
-cd cluster-b/
+# Navigate to cluster-b directory
+cd deployments/active-active/cluster-b/
 kubectl apply -f 00-namespace.yaml
 kubectl apply -f 01-rec-admin-secret.yaml
-kubectl apply -f 02-rbac-rack-awareness.yaml
+# kubectl apply -f 02-rbac-rack-awareness.yaml  # Only if nodes have topology.kubernetes.io/zone labels
 kubectl apply -f 03-rec.yaml
 
 # Wait for cluster ready (5-10 minutes)
 kubectl wait --for=condition=Ready rec/rec-b -n redis-enterprise --timeout=600s
+
+# Verify Ingress was created
+kubectl get ingress -n redis-enterprise
 ```
 
-### Step 2: Configure Remote Cluster Connections
-
-**On Both Clusters:**
-```bash
-# Cluster A
-kubectl config use-context <cluster-a-context>
-kubectl apply -f cluster-a/04-rerc-secrets.yaml
-kubectl apply -f cluster-a/05-rerc.yaml
-
-# Cluster B
-kubectl config use-context <cluster-b-context>
-kubectl apply -f cluster-b/04-rerc-secrets.yaml
-kubectl apply -f cluster-b/05-rerc.yaml
-
-# Verify remote clusters
-kubectl get rerc -n redis-enterprise  # Run on both clusters
-```
-
-### Step 3: Create Active-Active Database
-
-**On Cluster A only:**
-```bash
-kubectl config use-context <cluster-a-context>
-kubectl apply -f cluster-a/06-reaadb-secret.yaml
-kubectl apply -f cluster-a/07-reaadb.yaml
-
-# Wait for database creation
-kubectl wait --for=condition=Active reaadb/aadb -n redis-enterprise --timeout=300s
-```
-
-**Note:** The database is created only on Cluster A. It will automatically replicate to Cluster B.
-
-### Step 4: Verify Deployment
+**✅ Verification:** Both clusters should have Ingress resources created automatically by the Operator.
 
 ```bash
-# Check REC status on both clusters
-kubectl get rec -n redis-enterprise
+# On Cluster A
+kubectl get ingress -n redis-enterprise
+# Should show: rec-a-api, rec-a-db-*
 
-# Check REAADB status
-kubectl get reaadb -n redis-enterprise
-
-# Check remote clusters
-kubectl get rerc -n redis-enterprise
+# On Cluster B
+kubectl get ingress -n redis-enterprise
+# Should show: rec-b-api, rec-b-db-*
 ```
 
 ---
 
-## 🔍 Verification
+### Step 3: Configure Remote Cluster Connections
 
-### Verify Active-Active Replication
+**⚠️ Make sure Step 1 (FQDN configuration) was completed correctly!**
 
-**Test write replication:**
+**On Cluster A:**
 ```bash
-# Write to Cluster A
-kubectl run -it --rm redis-test --image=redis:latest --restart=Never -- \
+kubectl config use-context <cluster-a-context>
+cd deployments/active-active/cluster-a/
+
+kubectl apply -f 04-rerc-secrets.yaml
+kubectl apply -f 05-rerc.yaml
+
+# Verify remote clusters (should show 2 RERC: rerc-a and rerc-b)
+kubectl get rerc -n redis-enterprise
+
+# Check status (both should be "Active" after ~30 seconds)
+kubectl get rerc -n redis-enterprise -o wide
+```
+
+**On Cluster B:**
+```bash
+kubectl config use-context <cluster-b-context>
+cd deployments/active-active/cluster-b/
+
+kubectl apply -f 04-rerc-secrets.yaml
+kubectl apply -f 05-rerc.yaml
+
+# Verify remote clusters (should show 2 RERC: rerc-a and rerc-b)
+kubectl get rerc -n redis-enterprise
+
+# Check status (both should be "Active" after ~30 seconds)
+kubectl get rerc -n redis-enterprise -o wide
+```
+
+**✅ Expected Output:**
+```
+NAME     STATUS   SPEC STATUS   LOCAL
+rerc-a   Active   Valid         true
+rerc-b   Active   Valid         false
+```
+
+**🔍 Troubleshooting:** If RERC status is "Error", check:
+```bash
+kubectl describe rerc rerc-a -n redis-enterprise
+kubectl describe rerc rerc-b -n redis-enterprise
+```
+
+Common issues:
+- FQDNs not updated correctly in Step 1
+- Ingress not created (check `kubectl get ingress -n redis-enterprise`)
+- Network connectivity between clusters
+
+---
+
+### Step 4: Create Active-Active Database
+
+**⚠️ Only create the database on Cluster A - it will automatically replicate to Cluster B!**
+
+**On Cluster A only:**
+```bash
+kubectl config use-context <cluster-a-context>
+cd deployments/active-active/cluster-a/
+
+kubectl apply -f 06-reaadb-secret.yaml
+kubectl apply -f 07-reaadb.yaml
+
+# Wait for database creation (2-5 minutes)
+kubectl wait --for=condition=Active reaadb/aadb -n redis-enterprise --timeout=300s
+
+# Check database status
+kubectl get reaadb -n redis-enterprise
+```
+
+**✅ Expected Output:**
+```
+NAME   STATUS   SPEC STATUS   LINKED REDBS
+aadb   active   Valid         rec-a,rec-b
+```
+
+**Verify on Cluster B (database should appear automatically):**
+```bash
+kubectl config use-context <cluster-b-context>
+
+# Check if database instance exists
+kubectl get redb -n redis-enterprise
+
+# Should show: aadb (created automatically via replication)
+```
+
+---
+
+### Step 5: Verify Deployment
+
+**Check all resources on both clusters:**
+
+```bash
+# Cluster A
+kubectl config use-context <cluster-a-context>
+
+# Check REC status
+kubectl get rec -n redis-enterprise
+# Expected: rec-a with STATUS=Running
+
+# Check RERC status
+kubectl get rerc -n redis-enterprise
+# Expected: rerc-a (local) and rerc-b (remote) both Active
+
+# Check REAADB status
+kubectl get reaadb -n redis-enterprise
+# Expected: aadb with STATUS=active
+
+# Check Ingress
+kubectl get ingress -n redis-enterprise
+# Expected: rec-a-api and database ingresses
+
+# Cluster B
+kubectl config use-context <cluster-b-context>
+
+# Check REC status
+kubectl get rec -n redis-enterprise
+# Expected: rec-b with STATUS=Running
+
+# Check RERC status
+kubectl get rerc -n redis-enterprise
+# Expected: rerc-a (remote) and rerc-b (local) both Active
+
+# Check REDB (database instance)
+kubectl get redb -n redis-enterprise
+# Expected: aadb (replicated from Cluster A)
+
+# Check Ingress
+kubectl get ingress -n redis-enterprise
+# Expected: rec-b-api and database ingresses
+```
+
+---
+
+## 🔍 Testing Active-Active Replication
+
+### Test 1: Write to Cluster A, Read from Cluster B
+
+**On Cluster A:**
+```bash
+kubectl config use-context <cluster-a-context>
+
+# Write data
+kubectl run -it --rm redis-test --image=redis:latest --restart=Never -n redis-enterprise -- \
   redis-cli -h aadb.redis-enterprise.svc.cluster.local \
   -p 12000 --tls --insecure -a RedisAdmin123! \
   SET test-key "written-from-cluster-a"
+```
 
-# Read from Cluster B (should see the same value)
-kubectl run -it --rm redis-test --image=redis:latest --restart=Never -- \
+**On Cluster B:**
+```bash
+kubectl config use-context <cluster-b-context>
+
+# Read data (should see the value from Cluster A)
+kubectl run -it --rm redis-test --image=redis:latest --restart=Never -n redis-enterprise -- \
   redis-cli -h aadb.redis-enterprise.svc.cluster.local \
   -p 12000 --tls --insecure -a RedisAdmin123! \
   GET test-key
 ```
 
-**Expected:** Value should replicate from Cluster A to Cluster B within seconds.
+**✅ Expected:** Should return `"written-from-cluster-a"` (replicated within seconds)
 
-### Check Replication Status
+---
 
-In the Redis Enterprise UI:
+### Test 2: Bi-directional Replication
+
+**On Cluster B:**
+```bash
+# Write from Cluster B
+kubectl run -it --rm redis-test --image=redis:latest --restart=Never -n redis-enterprise -- \
+  redis-cli -h aadb.redis-enterprise.svc.cluster.local \
+  -p 12000 --tls --insecure -a RedisAdmin123! \
+  SET another-key "written-from-cluster-b"
+```
+
+**On Cluster A:**
+```bash
+# Read from Cluster A
+kubectl run -it --rm redis-test --image=redis:latest --restart=Never -n redis-enterprise -- \
+  redis-cli -h aadb.redis-enterprise.svc.cluster.local \
+  -p 12000 --tls --insecure -a RedisAdmin123! \
+  GET another-key
+```
+
+**✅ Expected:** Should return `"written-from-cluster-b"` (bi-directional replication works!)
+
+---
+
+### Test 3: Check Replication Status via UI
+
+**Access Redis Enterprise UI:**
+
+```bash
+# Get UI LoadBalancer IP for Cluster A
+kubectl get svc rec-a-ui -n redis-enterprise -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+
+# Access: https://<IP>:8443
+# Username: admin@redis.com
+# Password: RedisAdmin123!
+```
+
+**In the UI:**
 1. Navigate to **Databases** → **aadb**
-2. Check **Replication** tab
-3. Verify both instances show "Synced" status
+2. Click **Configuration** tab → **Replication**
+3. Verify both instances show **"Synced"** status
+4. Check **Replication lag** (should be < 1 second)
 
 ---
 
@@ -313,7 +650,7 @@ kubectl delete -f cluster-a/06-reaadb-secret.yaml
 kubectl delete -f cluster-a/05-rerc.yaml
 kubectl delete -f cluster-a/04-rerc-secrets.yaml
 kubectl delete -f cluster-a/03-rec.yaml
-kubectl delete -f cluster-a/02-rbac-rack-awareness.yaml
+# kubectl delete -f cluster-a/02-rbac-rack-awareness.yaml  # If you applied it
 kubectl delete -f cluster-a/01-rec-admin-secret.yaml
 kubectl delete -f cluster-a/00-namespace.yaml
 
@@ -322,9 +659,27 @@ kubectl config use-context <cluster-b-context>
 kubectl delete -f cluster-b/05-rerc.yaml
 kubectl delete -f cluster-b/04-rerc-secrets.yaml
 kubectl delete -f cluster-b/03-rec.yaml
-kubectl delete -f cluster-b/02-rbac-rack-awareness.yaml
+# kubectl delete -f cluster-b/02-rbac-rack-awareness.yaml  # If you applied it
 kubectl delete -f cluster-b/01-rec-admin-secret.yaml
 kubectl delete -f cluster-b/00-namespace.yaml
+
+# Delete Operators (optional)
+kubectl config use-context <cluster-a-context>
+helm uninstall redis-operator -n redis-enterprise
+helm uninstall ingress-nginx -n ingress-nginx
+
+kubectl config use-context <cluster-b-context>
+helm uninstall redis-operator -n redis-enterprise
+helm uninstall ingress-nginx -n ingress-nginx
+
+# Delete namespaces (this will delete everything)
+kubectl config use-context <cluster-a-context>
+kubectl delete namespace redis-enterprise
+kubectl delete namespace ingress-nginx
+
+kubectl config use-context <cluster-b-context>
+kubectl delete namespace redis-enterprise
+kubectl delete namespace ingress-nginx
 ```
 
 ---

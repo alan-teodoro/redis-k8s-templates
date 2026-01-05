@@ -9,11 +9,19 @@ spec:
   nodes: 3
   username: admin@redis.com
   
-  # ⚠️ UPDATE THESE FQDNs FOR YOUR ENVIRONMENT
-  # See README.md for configuration instructions
+  # Ingress configuration with nip.io DNS
+  # Ingress Controller IP: 34.59.26.146
   ingressOrRouteSpec:
-    apiFqdnUrl: api-rec-b.redis.example.com
-    dbFqdnSuffix: .db-rec-b.redis.example.com
+    apiFqdnUrl: rec-b-api.34.59.26.146.nip.io
+    dbFqdnSuffix: .db-rec-b.34.59.26.146.nip.io
+    method: ingress
+    ingressAnnotations:
+      kubernetes.io/ingress.class: "nginx"
+      nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+
+  # UI Service (optional LoadBalancer for direct access)
+  uiServiceType: LoadBalancer
   
   persistentSpec:
     enabled: true
@@ -28,6 +36,6 @@ spec:
       cpu: 2
       memory: 4Gi
   
-  # Rack awareness for multi-AZ distribution
-  rackAwarenessNodeLabel: topology.kubernetes.io/zone
+  # Rack awareness disabled (nodes don't have zone labels)
+  # rackAwarenessNodeLabel: topology.kubernetes.io/zone
 

@@ -19,8 +19,8 @@ spec:
     # Database password from secret
     databaseSecretName: reaadb-secret
     
-    # Enable replication (master + replica per cluster)
-    replication: true
+    # Disable replication for testing (requires more nodes for rack awareness)
+    replication: false
     
     # TLS mode (enabled, disabled, replica_ssl)
     tlsMode: enabled
