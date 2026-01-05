@@ -48,46 +48,59 @@ Active-Active deployment across two Kubernetes clusters for geo-distribution.
 
 ---
 
-### 3. Production (Recommended for Production)
+### 3. Multi-Namespace
 
-**See:** [production/README.md](production/README.md)
+**See:** [multi-namespace/README.md](multi-namespace/README.md)
 
-Production-grade deployment with optimized resources and configurations.
+Single REC managing databases across multiple Kubernetes namespaces.
 
 **Use cases:**
-- Production workloads
-- High-performance requirements
-- Large-scale deployments
+- Multi-tenant environments
+- Namespace isolation per team/environment
+- Centralized Redis management
+- Dev/Staging/Prod separation
 
 **Features:**
-- Optimized resource allocation
-- Production-grade storage
-- Enhanced monitoring
-- Backup configurations
-
-**Status:** 🚧 Coming soon
+- Single operator, multiple namespaces
+- RBAC per namespace
+- Resource sharing
+- Centralized management
 
 ---
 
-### 3. Active-Active (Multi-Region)
+### 4. Redis on Flash (RoF)
 
-**See:** [active-active/README.md](active-active/README.md)
+**See:** [redis-on-flash/README.md](redis-on-flash/README.md)
 
-Geo-distributed Redis Enterprise deployment across multiple Kubernetes clusters.
+Redis Enterprise with Flash storage for cost-effective large datasets.
 
 **Use cases:**
-- Multi-region deployments
-- Global applications
-- Disaster recovery
-- Low-latency local reads/writes
+- Large datasets (100GB+)
+- Cost optimization
+- Warm data storage
 
 **Features:**
-- Conflict-free replication (CRDT)
-- Local read/write in each region
-- Automatic conflict resolution
-- Business continuity
+- RAM + Flash storage
+- Cost-effective for large datasets
+- Automatic tiering
 
-**Status:** 🚧 Coming soon
+---
+
+### 5. Redis Data Integration (RDI)
+
+**See:** [rdi/README.md](rdi/README.md)
+
+Real-time data integration from databases to Redis.
+
+**Use cases:**
+- Database caching
+- Real-time data sync
+- CDC (Change Data Capture)
+
+**Features:**
+- Real-time sync from PostgreSQL, MySQL, Oracle, SQL Server
+- Automatic schema detection
+- Transformation pipelines
 
 ---
 
@@ -129,11 +142,13 @@ kubectl apply -f single-region/05-redb.yaml
 
 ## Architecture Decision
 
-| Pattern | Complexity | HA | DR | Use Case |
-|---------|-----------|----|----|----------|
-| **Single-Region** | Low | ✅ | ❌ | Dev/Test, Single DC |
-| **Production** | Medium | ✅ | ⚠️ | Production, High Performance |
-| **Active-Active** | High | ✅ | ✅ | Multi-Region, Global Apps |
+| Pattern | Complexity | HA | DR | Multi-Region | Use Case |
+|---------|-----------|----|----|--------------|----------|
+| **Single-Region** | Low | ✅ | ❌ | ❌ | Dev/Test, Single DC |
+| **Active-Active** | High | ✅ | ✅ | ✅ | Multi-Region, Global Apps |
+| **Multi-Namespace** | Low | ✅ | ❌ | ❌ | Multi-tenant, Team isolation |
+| **Redis on Flash** | Medium | ✅ | ❌ | ❌ | Large datasets, Cost optimization |
+| **RDI** | Medium | ✅ | ❌ | ❌ | Database sync, CDC |
 
 ---
 
@@ -141,7 +156,9 @@ kubectl apply -f single-region/05-redb.yaml
 
 After deploying Redis Enterprise:
 
-1. **External Access:** Configure networking ([networking/](../networking/))
+1. **External Access:** Configure networking
+   - **Recommended:** [NGINX Ingress Controller](../networking/ingress/nginx/README.md)
+   - **Overview:** [networking/README.md](../networking/README.md)
 2. **Monitoring:** Set up observability ([monitoring/](../monitoring/))
 3. **Security:** Implement security best practices ([security/](../security/))
 4. **Backup:** Configure backup and restore ([backup-restore/](../backup-restore/))

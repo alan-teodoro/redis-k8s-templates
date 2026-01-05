@@ -105,46 +105,51 @@ nginx/
 
 ## 🚀 Installation
 
-### Step 1: Install NGINX Ingress Controller with TCP Support
+### Step 1: Install NGINX Ingress Controller with SSL Passthrough
+
+**⚠️ IMPORTANT:** For Redis Enterprise Active-Active, you MUST enable SSL passthrough!
 
 ```bash
 # Add Helm repository
 helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 helm repo update
 
-# Install for AWS EKS with TCP port 12000 for database
+# Install for AWS EKS
 helm install ingress-nginx ingress-nginx/ingress-nginx \
   --namespace ingress-nginx \
   --create-namespace \
   --set controller.service.type=LoadBalancer \
+  --set controller.extraArgs.enable-ssl-passthrough=true \
   --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb" \
   --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing" \
-  --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-cross-zone-load-balancing-enabled"="true" \
-  --set tcp.12000="redis-enterprise/test-db:12000"
+  --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-cross-zone-load-balancing-enabled"="true"
 
 # For GKE
-# helm install ingress-nginx ingress-nginx/ingress-nginx \
-#   --namespace ingress-nginx \
-#   --create-namespace \
-#   --set controller.service.type=LoadBalancer \
-#   --set tcp.12000="redis-enterprise/test-db:12000"
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace \
+  --set controller.service.type=LoadBalancer \
+  --set controller.extraArgs.enable-ssl-passthrough=true
 
 # For AKS
-# helm install ingress-nginx ingress-nginx/ingress-nginx \
-#   --namespace ingress-nginx \
-#   --create-namespace \
-#   --set controller.service.type=LoadBalancer \
-#   --set tcp.12000="redis-enterprise/test-db:12000"
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace \
+  --set controller.service.type=LoadBalancer \
+  --set controller.extraArgs.enable-ssl-passthrough=true
 
 # For vanilla Kubernetes
-# helm install ingress-nginx ingress-nginx/ingress-nginx \
-#   --namespace ingress-nginx \
-#   --create-namespace \
-#   --set controller.service.type=LoadBalancer \
-#   --set tcp.12000="redis-enterprise/test-db:12000"
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace \
+  --set controller.service.type=LoadBalancer \
+  --set controller.extraArgs.enable-ssl-passthrough=true
 ```
 
-**Note:** The `--set tcp.12000="redis-enterprise/test-db:12000"` configures TCP passthrough for the database on port 12000.
+**Important Notes:**
+- `--set controller.extraArgs.enable-ssl-passthrough=true` is **REQUIRED** for Redis Enterprise Active-Active
+- Without SSL passthrough, RERC (Remote Cluster) connections will fail with HTTP 502 errors
+- For single-cluster deployments (non-Active-Active), SSL passthrough is optional
 
 ### Step 2: Wait for LoadBalancer
 

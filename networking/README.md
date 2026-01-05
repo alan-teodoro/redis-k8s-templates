@@ -26,7 +26,7 @@ This directory contains configurations for exposing Redis Enterprise Cluster (RE
 
 ## 🌐 Networking Solutions
 
-### 1. Gateway API (Recommended)
+### 1. Gateway API (Future)
 
 **See:** [gateway-api/](gateway-api/)
 
@@ -50,30 +50,34 @@ Modern Kubernetes networking API (successor to Ingress).
 
 **Cons:**
 - ❌ Requires Gateway API CRDs installation
-- ❌ Not all clusters support it yet
+- ❌ **Redis Operator does NOT support Gateway API natively yet**
+- ❌ TLSRoute still in alpha (v1alpha2)
+- ❌ Requires manual TLSRoute creation for each database
 
 ---
 
-### 2. Ingress (NGINX Ingress Controller)
+### 2. Ingress (NGINX Ingress Controller) - **RECOMMENDED**
 
 **See:** [ingress/nginx/](ingress/nginx/)
 
 Traditional Kubernetes Ingress with NGINX.
 
 **Use cases:**
+- **Production deployments (recommended for now)**
 - Clusters without Gateway API support
 - Simple HTTP/HTTPS routing
 - Wide compatibility
 
 **Pros:**
-- ✅ Widely supported
-- ✅ Mature and stable
+- ✅ **Natively supported by Redis Enterprise Operator**
+- ✅ **Operator creates Ingress resources automatically**
+- ✅ Widely supported and mature
 - ✅ Works on most Kubernetes versions
+- ✅ TLS passthrough via annotations (with `--enable-ssl-passthrough`)
 
 **Cons:**
-- ❌ Limited TLS passthrough support
-- ❌ TCP/UDP requires ConfigMap configuration
-- ❌ Less flexible than Gateway API
+- ❌ Requires annotations for advanced features
+- ❌ Less flexible than Gateway API (future)
 
 ---
 
@@ -148,19 +152,34 @@ Access Redis Enterprise from within the Kubernetes cluster only.
 
 ## 🎯 Decision Matrix
 
-| Solution | Complexity | Performance | TLS Passthrough | Modern | Recommended For |
-|----------|------------|-------------|-----------------|--------|-----------------|
-| **Gateway API (NGINX)** | Medium | High | ✅ Excellent | ✅ Yes | New deployments |
-| **NGINX Ingress** | Low | High | ⚠️ Limited | ❌ No | Legacy clusters |
-| **HAProxy Ingress** | Medium | Very High | ✅ Good | ❌ No | High performance |
-| **Istio** | High | Medium | ✅ Excellent | ✅ Yes | Service mesh users |
+| Solution | Complexity | Performance | TLS Passthrough | Redis Operator Support | Recommended For |
+|----------|------------|-------------|-----------------|------------------------|-----------------|
+| **NGINX Ingress** | Low | High | ✅ Good (with flag) | ✅ **Native** | **Production (NOW)** |
+| **Gateway API (NGINX)** | Medium | High | ✅ Excellent | ❌ Manual only | Future (2025+) |
+| **HAProxy Ingress** | Medium | Very High | ✅ Good | ✅ Native | High performance |
+| **Istio** | High | Medium | ✅ Excellent | ⚠️ Limited | Service mesh users |
 | **In-Cluster** | Very Low | N/A | N/A | N/A | Dev/Test |
 
 ---
 
 ## 🚀 Quick Start
 
-### For New Deployments (Recommended)
+### For Production Deployments (Recommended)
+
+Use **NGINX Ingress Controller**:
+
+```bash
+cd ingress/nginx/
+# Follow README.md
+```
+
+**Why NGINX Ingress?**
+- ✅ Natively supported by Redis Operator
+- ✅ Automatic Ingress creation
+- ✅ Production-ready and stable
+- ✅ Works on all cloud providers (GKE, EKS, AKS)
+
+### For Future/Experimental
 
 Use **Gateway API with NGINX Gateway Fabric**:
 
@@ -169,14 +188,7 @@ cd gateway-api/nginx-gateway-fabric/
 # Follow README.md
 ```
 
-### For Existing Clusters
-
-Use **NGINX Ingress Controller**:
-
-```bash
-cd ingress/nginx/
-# Follow README.md
-```
+**Note:** Requires manual TLSRoute creation. Redis Operator does not support Gateway API natively yet.
 
 ---
 

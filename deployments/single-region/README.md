@@ -81,8 +81,14 @@ kubectl apply -f 00-namespace.yaml
 kubectl apply -f 01-rec-admin-secret.yaml
 kubectl apply -f 02-redb-secret.yaml
 
-# 3. Apply RBAC for rack awareness
+# 3. Apply RBAC for rack awareness (optional - see note below)
 kubectl apply -f 03-rbac-rack-awareness.yaml
+
+# 📝 Note on Rack Awareness:
+# - Only apply if your nodes have topology.kubernetes.io/zone labels
+# - Check with: kubectl get nodes --show-labels | grep topology.kubernetes.io/zone
+# - If nodes don't have zone labels, skip this step and comment out
+#   rackAwarenessNodeLabel in 04-rec.yaml (line 72)
 
 # 4. Deploy Redis Enterprise Cluster
 kubectl apply -f 04-rec.yaml
@@ -223,10 +229,23 @@ kubectl delete pod redis-cli-test -n redis-enterprise
 
 ### External Access
 
-Choose networking solution based on your platform:
+Choose networking solution based on your requirements:
 
-- **Generic (EKS/GKE/AKS/Vanilla):** [networking/gateway-api/nginx-gateway-fabric/README.md](../../networking/gateway-api/nginx-gateway-fabric/README.md)
-- **OpenShift:** [platforms/openshift/routes/README.md](../../platforms/openshift/routes/README.md)
+**Recommended for Production:**
+- **NGINX Ingress Controller:** [networking/ingress/nginx/README.md](../../networking/ingress/nginx/README.md)
+  - ✅ Mature and stable
+  - ✅ Natively supported by Redis Operator
+  - ✅ Works on all platforms (EKS/GKE/AKS/Vanilla)
+
+**Platform-Specific:**
+- **OpenShift Routes:** [platforms/openshift/routes/README.md](../../platforms/openshift/routes/README.md)
+
+**Future/Experimental:**
+- **Gateway API (NGINX Gateway Fabric):** [networking/gateway-api/nginx-gateway-fabric/README.md](../../networking/gateway-api/nginx-gateway-fabric/README.md)
+  - ⚠️ Requires manual TLSRoute creation
+  - ⚠️ Not yet supported natively by Redis Operator
+
+**See also:** [networking/README.md](../../networking/README.md) for complete comparison
 
 ### Monitoring
 
