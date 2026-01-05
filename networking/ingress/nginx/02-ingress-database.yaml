@@ -1,0 +1,126 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: redis-database
+  namespace: redis-enterprise
+  annotations:
+    # NGINX-specific annotations for TLS passthrough
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    
+    # Backend protocol (TLS)
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    
+    # Timeouts for long-running connections
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+spec:
+  ingressClassName: nginx
+  
+  rules:
+    # ⚠️ UPDATE THESE HOSTNAMES FOR YOUR ENVIRONMENT
+    # Database: test-db (port 12000)
+    - host: redis-12000.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: test-db
+                port:
+                  number: 12000
+    
+    # Add more databases as needed:
+    # - host: redis-12001.example.com
+    #   http:
+    #     paths:
+    #       - path: /
+    #         pathType: Prefix
+    #         backend:
+    #           service:
+    #             name: cache-db
+    #             port:
+    #               number: 12001
+
+---
+# Configuration Notes:
+#
+# 1. SSL Passthrough:
+#    - nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+#    - REQUIRED for Redis databases
+#    - NGINX does NOT terminate TLS - passes encrypted traffic to database
+#    - Database handles TLS termination
+#
+# 2. Hostname-based Routing (SNI):
+#    - Each database gets a unique hostname
+#    - Client MUST support SNI (Server Name Indication)
+#    - All databases use port 443 (standard HTTPS port)
+#
+# 3. Service Name:
+#    - Must match the Kubernetes service created by Redis Operator
+#    - Check with: kubectl get svc -n redis-enterprise
+#    - Format: <database-name> (e.g., test-db, cache-db)
+#
+# 4. Service Port:
+#    - Must match the database port in REDB spec
+#    - Check with: kubectl get redb <db-name> -n redis-enterprise -o yaml
+#    - Look for: spec.databasePort
+#
+# 5. External Access:
+#    - Clients connect to: redis-12000.example.com:443
+#    - NGINX routes to: test-db:12000 (internal service)
+#    - All traffic goes through port 443 (easier for firewalls)
+#
+# 6. DNS Configuration:
+#    - Create A record: redis-12000.example.com → LoadBalancer IP
+#    - Or use wildcard: *.example.com → LoadBalancer IP
+#
+# Testing:
+#
+#   # Get LoadBalancer IP
+#   LB_HOST=$(kubectl get svc ingress-nginx-controller -n ingress-nginx \
+#     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+#
+#   # Get database password
+#   DB_PASS=$(kubectl get secret redb-test-db -n redis-enterprise \
+#     -o jsonpath='{.data.password}' | base64 -d)
+#
+#   # Test with redis-cli (port 443, not 12000!)
+#   redis-cli -h redis-12000.example.com -p 443 \
+#     --tls --insecure \
+#     --sni redis-12000.example.com \
+#     -a ${DB_PASS} \
+#     PING
+#
+#   # Expected: PONG
+#
+# Comparison with TCP Passthrough (Helm method):
+#
+#   Method 1: Ingress Resource (this file)
+#     - Uses hostname-based routing (SNI)
+#     - All databases on port 443
+#     - More flexible, easier firewall rules
+#     - Requires DNS configuration
+#     - Client MUST support SNI
+#
+#   Method 2: TCP Passthrough (Helm values)
+#     - Uses port-based routing
+#     - Each database on dedicated port (12000, 12001, etc.)
+#     - Simpler, no DNS needed
+#     - No SNI required
+#     - Configured via: --set tcp.12000="redis-enterprise/test-db:12000"
+#
+# Recommendation:
+#   - Use Ingress Resource (this file) for production with proper DNS
+#   - Use TCP Passthrough (Helm) for dev/test or when DNS is not available
+#
+# Prerequisites:
+#   - NGINX Ingress Controller installed with --enable-ssl-passthrough
+#   - DNS configured for database hostnames
+#   - Database created with TLS enabled (tlsMode: enabled)
+#
+# See also:
+#   - networking/ingress/nginx/README.md (full documentation)
+#   - Official docs: https://docs.redis.com/latest/platforms/kubernetes/tasks/set-up-ingress-controller/
+

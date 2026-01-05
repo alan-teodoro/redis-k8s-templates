@@ -15,20 +15,44 @@ NGINX Ingress handles **two different types of traffic**:
 ### 1. **HTTP/HTTPS Traffic (REC UI)** ✅ Uses Ingress Resource
 - Protocol: HTTP/HTTPS
 - Configuration: Kubernetes `Ingress` resource
-- File: `01-ingress-rec-ui.yaml` ← **You need this file**
+- File: `01-ingress-rec-ui.yaml`
 - Routing: Based on hostname (`rec-ui.example.com`)
 - Port: 443 (HTTPS)
 
-### 2. **TCP Traffic (Databases)** ✅ Uses Helm Values (NO Ingress!)
+### 2. **Database Traffic** - Two Methods Available
+
+#### **Method A: Ingress Resource with SNI** (Recommended for Production)
+- Protocol: TLS over TCP
+- Configuration: Kubernetes `Ingress` resource with `ssl-passthrough`
+- File: `02-ingress-database.yaml`
+- Routing: Based on **hostname (SNI)** (`redis-12000.example.com`)
+- Port: **443** (all databases share this port)
+- **Advantages:**
+  - ✅ All databases on standard port 443
+  - ✅ Easier firewall rules
+  - ✅ More flexible routing
+  - ✅ Follows official Redis documentation
+- **Requirements:**
+  - DNS configuration required
+  - Client MUST support SNI
+
+#### **Method B: TCP Passthrough via Helm** (Simpler Alternative)
 - Protocol: TCP (raw Redis protocol)
 - Configuration: Helm values (`--set tcp.PORT=...`)
-- File: **NONE** ← **No YAML file needed!**
-- Routing: Based on port (12000, 12001, etc.)
-- Ports: 12000+ (configurable)
+- File: **NONE** (configured via Helm)
+- Routing: Based on **port** (12000, 12001, etc.)
+- Ports: Dedicated port per database
+- **Advantages:**
+  - ✅ Simpler setup (no DNS needed)
+  - ✅ No SNI requirement
+  - ✅ Direct port mapping
+- **Disadvantages:**
+  - ❌ Requires dedicated port per database
+  - ❌ More firewall rules needed
 
 **🔑 Key Difference:**
-- **REC UI** = Ingress YAML file required
-- **Databases** = Just Helm values, no YAML file!
+- **Method A (Ingress)**: All databases → port 443, routed by hostname
+- **Method B (TCP)**: Each database → dedicated port (12000, 12001, etc.)
 
 **What Helm does automatically for databases:**
 
@@ -95,13 +119,15 @@ Legend:
 ```
 nginx/
 ├── README.md                          # This file
-└── 01-ingress-rec-ui.yaml             # REC UI Ingress (HTTPS)
+├── 01-ingress-rec-ui.yaml             # REC UI Ingress (HTTPS)
+└── 02-ingress-database.yaml           # Database Ingress (TLS passthrough, SNI-based)
 ```
 
-**⚠️ IMPORTANT:**
-- **REC UI** uses Kubernetes `Ingress` resource (HTTP/HTTPS) → needs YAML file
-- **Databases** use TCP passthrough via Helm values → **NO YAML file needed!**
-- TCP services are configured via: `--set tcp.PORT="namespace/service:port"`
+**Files Explained:**
+- **01-ingress-rec-ui.yaml**: REC UI access via HTTPS (hostname-based routing)
+- **02-ingress-database.yaml**: Database access via TLS passthrough (SNI-based routing)
+  - **Optional**: Use this for production with proper DNS
+  - **Alternative**: Use TCP passthrough via Helm (simpler, no DNS needed)
 
 ## 🚀 Installation
 
@@ -164,7 +190,9 @@ kubectl wait --for=condition=ready pod \
 kubectl get svc ingress-nginx-controller -n ingress-nginx
 ```
 
-### Step 3: Deploy REC UI Ingress
+### Step 3: Deploy Ingress Resources
+
+#### REC UI (Required)
 
 ```bash
 # Apply REC UI Ingress
@@ -172,6 +200,38 @@ kubectl apply -f 01-ingress-rec-ui.yaml
 ```
 
 **Note:** Update the hostname in `01-ingress-rec-ui.yaml` before applying if needed.
+
+#### Databases (Choose One Method)
+
+**Method A: Ingress Resource (Recommended for Production)**
+
+```bash
+# Apply Database Ingress
+kubectl apply -f 02-ingress-database.yaml
+```
+
+**Prerequisites:**
+- DNS configured: `redis-12000.example.com` → LoadBalancer IP
+- Database created with `tlsMode: enabled`
+- Update hostnames in `02-ingress-database.yaml`
+
+**Advantages:**
+- All databases on port 443
+- Easier firewall rules
+- Follows official Redis documentation
+
+**Method B: TCP Passthrough via Helm (Simpler Alternative)**
+
+Configure during Helm install/upgrade (see Step 1 above):
+
+```bash
+--set tcp.12000="redis-enterprise/test-db:12000"
+```
+
+**Advantages:**
+- Simpler setup (no DNS needed)
+- No SNI requirement
+- Direct port mapping
 
 ## 📝 Configuration
 
@@ -191,7 +251,52 @@ rules:
   - host: rec-ui.example.com  # ⚠️ Change to your domain
 ```
 
-### TCP Services (Configured via Helm)
+### Database Ingress (02-ingress-database.yaml) - Method A
+
+Exposes databases via TLS passthrough with SNI-based routing.
+
+**Key configurations:**
+- `nginx.ingress.kubernetes.io/ssl-passthrough: "true"` - **REQUIRED** for Redis databases
+- `ingressClassName: nginx` - Uses NGINX Ingress Controller
+- Routing: Based on hostname (SNI)
+- Port: 443 (all databases share this port)
+
+**Update before applying:**
+```yaml
+rules:
+  - host: redis-12000.example.com  # ⚠️ Change to your domain
+    http:
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: test-db        # ⚠️ Change to your database service name
+              port:
+                number: 12000      # ⚠️ Change to your database port
+```
+
+**How it works:**
+1. Client connects to `redis-12000.example.com:443` with SNI
+2. NGINX reads SNI header and routes to `test-db:12000`
+3. Database handles TLS termination
+4. All databases use port 443 (easier firewall rules)
+
+**Testing:**
+```bash
+# Get database password
+DB_PASS=$(kubectl get secret redb-test-db -n redis-enterprise \
+  -o jsonpath='{.data.password}' | base64 -d)
+
+# Test with redis-cli (note: port 443, not 12000!)
+redis-cli -h redis-12000.example.com -p 443 \
+  --tls --insecure \
+  --sni redis-12000.example.com \
+  -a ${DB_PASS} \
+  PING
+```
+
+### TCP Passthrough (Configured via Helm) - Method B
 
 Database TCP ports are configured during Helm install/upgrade:
 
@@ -217,6 +322,26 @@ This automatically:
 - Creates a ConfigMap with TCP service mappings
 - Exposes ports on the LoadBalancer service
 - Configures NGINX to proxy TCP traffic
+
+## 🔀 Database Access Methods Comparison
+
+| Aspect | Method A: Ingress Resource | Method B: TCP Passthrough |
+|--------|----------------------------|---------------------------|
+| **Configuration** | Kubernetes Ingress YAML | Helm values |
+| **File** | `02-ingress-database.yaml` | None (Helm only) |
+| **Routing** | Hostname-based (SNI) | Port-based |
+| **External Port** | 443 (all databases) | Dedicated per DB (12000, 12001, etc.) |
+| **DNS Required** | ✅ Yes | ❌ No |
+| **SNI Required** | ✅ Yes (client must support) | ❌ No |
+| **Firewall Rules** | Simple (only port 443) | Complex (one rule per DB) |
+| **Setup Complexity** | Medium | Low |
+| **Flexibility** | High (hostname routing) | Low (port routing) |
+| **Official Docs** | ✅ Recommended | Alternative |
+| **Best For** | Production with DNS | Dev/Test, no DNS |
+
+**Recommendation:**
+- **Production**: Use Method A (Ingress Resource) with proper DNS
+- **Dev/Test**: Use Method B (TCP Passthrough) for simplicity
 
 ## 🔐 Access
 
@@ -244,19 +369,52 @@ curl -k -I https://${LB_HOST} -H "Host: rec-ui.example.com"
 
 ### Database Access
 
+#### Method A: Via Ingress Resource (SNI-based)
+
 ```bash
-# Test database connection via TCP port 12000
-redis-cli -h ${LB_HOST} \
-  -p 12000 \
+# Get database password
+DB_PASS=$(kubectl get secret redb-test-db -n redis-enterprise \
+  -o jsonpath='{.data.password}' | base64 -d)
+
+# Test database connection via hostname (port 443)
+redis-cli -h redis-12000.example.com \
+  -p 443 \
   --tls \
   --insecure \
-  -a RedisAdmin123! \
+  --sni redis-12000.example.com \
+  -a ${DB_PASS} \
   PING
 ```
 
 **Expected:** `PONG`
 
-**Note:** The database is accessed directly via TCP passthrough on port 12000.
+**Note:**
+- Uses port 443 (standard HTTPS port)
+- Requires SNI support in client
+- Requires DNS configuration
+
+#### Method B: Via TCP Passthrough (Port-based)
+
+```bash
+# Get database password
+DB_PASS=$(kubectl get secret redb-test-db -n redis-enterprise \
+  -o jsonpath='{.data.password}' | base64 -d)
+
+# Test database connection via TCP port 12000
+redis-cli -h ${LB_HOST} \
+  -p 12000 \
+  --tls \
+  --insecure \
+  -a ${DB_PASS} \
+  PING
+```
+
+**Expected:** `PONG`
+
+**Note:**
+- Uses dedicated port (12000)
+- No SNI required
+- No DNS required (can use LoadBalancer IP directly)
 
 ## 🔧 Adding New Databases
 
