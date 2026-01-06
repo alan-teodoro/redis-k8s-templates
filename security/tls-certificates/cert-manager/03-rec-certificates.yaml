@@ -1,4 +1,26 @@
 ---
+# ⚠️ DOCUMENTATION FILE - Contains all certificates for reference ⚠️
+#
+# This file contains all certificate examples in one place.
+# You can apply this file to create all certificates at once, OR
+# apply individual certificate files based on your needs.
+#
+# Individual certificate files (apply only what you need):
+#   - 03a-api-certificate.yaml      (Required - Cluster Manager UI/API)
+#   - 03b-cm-certificate.yaml       (Required - Cluster Manager internal)
+#   - 03c-proxy-certificate.yaml    (Optional - Database TLS connections)
+#   - 03d-syncer-certificate.yaml   (Optional - Active-Active replication)
+#   - 03e-metrics-certificate.yaml  (Optional - Prometheus metrics TLS)
+#
+# Minimum required for basic REC with TLS:
+#   kubectl apply -f 03a-api-certificate.yaml
+#   kubectl apply -f 03b-cm-certificate.yaml
+#
+# Or apply all at once:
+#   kubectl apply -f 03-rec-certificates.yaml
+#
+# ============================================================================
+#
 # Certificate Resources for Redis Enterprise Cluster
 #
 # These Certificate CRDs define the certificates needed for Redis Enterprise:
@@ -15,10 +37,7 @@
 #
 # Prerequisites:
 # 1. cert-manager installed
-# 2. ClusterIssuer created (02-cluster-issuer.yaml)
-#
-# Usage:
-#   kubectl apply -f 03-rec-certificates.yaml
+# 2. ClusterIssuer created (e.g., selfsigned-issuer)
 
 ---
 # 1. API Certificate (Cluster Manager UI/API)

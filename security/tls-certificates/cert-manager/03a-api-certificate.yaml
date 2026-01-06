@@ -1,0 +1,67 @@
+---
+# API Certificate for Redis Enterprise Cluster
+#
+# This certificate is used for Cluster Manager UI/API access.
+#
+# Used for: https://rec-ui.redis-enterprise.svc.cluster.local:8443
+# Required: Yes (mandatory for REC)
+# Auto-renewal: Yes (at 2/3 of lifetime)
+#
+# Prerequisites:
+# 1. cert-manager installed
+# 2. ClusterIssuer created (e.g., selfsigned-issuer)
+#
+# Usage:
+#   kubectl apply -f 03a-api-certificate.yaml
+#
+# Verify:
+#   kubectl get certificate rec-api-cert -n redis-enterprise
+#   kubectl get secret rec-api-cert -n redis-enterprise
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rec-api-cert
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: api-certificate
+spec:
+  # Secret name where certificate will be stored
+  secretName: rec-api-cert
+  
+  # Certificate issuer
+  issuerRef:
+    name: selfsigned-issuer  # Change to your issuer (ca-issuer, vault-issuer, letsencrypt-prod)
+    kind: ClusterIssuer
+  
+  # Certificate subject
+  commonName: rec.redis-enterprise.svc.cluster.local
+  
+  # Subject Alternative Names (SANs)
+  dnsNames:
+    - rec.redis-enterprise.svc.cluster.local
+    - rec-ui.redis-enterprise.svc.cluster.local
+    - "*.rec.redis-enterprise.svc.cluster.local"
+    # Add external FQDN if using ingress:
+    # - rec.redis.example.com
+  
+  # Certificate validity
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # Renew 30 days before expiry (at day 60)
+  
+  # Private key configuration
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    # Or use ECDSA for better performance:
+    # algorithm: ECDSA
+    # size: 256
+  
+  # Key usages
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+

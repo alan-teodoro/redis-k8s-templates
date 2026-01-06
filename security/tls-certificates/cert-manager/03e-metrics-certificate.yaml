@@ -1,0 +1,61 @@
+---
+# Metrics Exporter Certificate for Redis Enterprise Cluster
+#
+# This certificate is used for Prometheus metrics scraping endpoint.
+#
+# Used for: Prometheus metrics endpoint (TLS)
+# Required: Optional (only if Prometheus uses TLS)
+# Auto-renewal: Yes (at 2/3 of lifetime)
+#
+# Prerequisites:
+# 1. cert-manager installed
+# 2. ClusterIssuer created (e.g., selfsigned-issuer)
+# 3. Prometheus monitoring with TLS enabled
+#
+# Usage:
+#   kubectl apply -f 03e-metrics-certificate.yaml
+#
+# Verify:
+#   kubectl get certificate rec-metrics-cert -n redis-enterprise
+#   kubectl get secret rec-metrics-cert -n redis-enterprise
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rec-metrics-cert
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: metrics-certificate
+spec:
+  # Secret name where certificate will be stored
+  secretName: rec-metrics-cert
+  
+  # Certificate issuer
+  issuerRef:
+    name: selfsigned-issuer  # Change to your issuer (ca-issuer, vault-issuer, letsencrypt-prod)
+    kind: ClusterIssuer
+  
+  # Certificate subject
+  commonName: rec-metrics.redis-enterprise.svc.cluster.local
+  
+  # Subject Alternative Names (SANs)
+  dnsNames:
+    - rec-metrics.redis-enterprise.svc.cluster.local
+    - "*.rec.redis-enterprise.svc.cluster.local"
+  
+  # Certificate validity
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # Renew 30 days before expiry (at day 60)
+  
+  # Private key configuration
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  
+  # Key usages
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+

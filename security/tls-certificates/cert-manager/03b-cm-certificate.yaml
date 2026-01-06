@@ -1,0 +1,61 @@
+---
+# Cluster Manager Certificate for Redis Enterprise Cluster
+#
+# This certificate is used for internal cluster management communication.
+#
+# Used for: Internal cluster management communication
+# Required: Yes (mandatory for REC)
+# Auto-renewal: Yes (at 2/3 of lifetime)
+#
+# Prerequisites:
+# 1. cert-manager installed
+# 2. ClusterIssuer created (e.g., selfsigned-issuer)
+#
+# Usage:
+#   kubectl apply -f 03b-cm-certificate.yaml
+#
+# Verify:
+#   kubectl get certificate rec-cm-cert -n redis-enterprise
+#   kubectl get secret rec-cm-cert -n redis-enterprise
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rec-cm-cert
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+    component: cm-certificate
+spec:
+  # Secret name where certificate will be stored
+  secretName: rec-cm-cert
+  
+  # Certificate issuer
+  issuerRef:
+    name: selfsigned-issuer  # Change to your issuer (ca-issuer, vault-issuer, letsencrypt-prod)
+    kind: ClusterIssuer
+  
+  # Certificate subject
+  commonName: rec-cm.redis-enterprise.svc.cluster.local
+  
+  # Subject Alternative Names (SANs)
+  dnsNames:
+    - rec-cm.redis-enterprise.svc.cluster.local
+    - "*.rec.redis-enterprise.svc.cluster.local"
+  
+  # Certificate validity
+  duration: 2160h  # 90 days
+  renewBefore: 720h  # Renew 30 days before expiry (at day 60)
+  
+  # Private key configuration
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  
+  # Key usages
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth
+

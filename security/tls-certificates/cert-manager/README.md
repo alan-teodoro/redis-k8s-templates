@@ -116,16 +116,26 @@ Files in this directory:
 
 📄 01-install-cert-manager.yaml      ❌ DO NOT APPLY (documentation only)
 📄 02-cluster-issuer.yaml            ❌ DO NOT APPLY (documentation only)
+📄 03-rec-certificates.yaml          ⚠️  OPTIONAL (all certificates in one file)
 
 ✅ 02a-selfsigned-issuer.yaml        ← Apply for lab/testing
 ✅ 02b-ca-issuer.yaml                ← Apply if you have existing CA
 ✅ 02c-vault-issuer.yaml             ← Apply if you have Vault
 ✅ 02d-letsencrypt-issuer.yaml       ← Apply for public domains
 
-✅ 03-rec-certificates.yaml          ← Apply (creates certificates)
+✅ 03a-api-certificate.yaml          ← Required (Cluster Manager UI/API)
+✅ 03b-cm-certificate.yaml           ← Required (Cluster Manager internal)
+✅ 03c-proxy-certificate.yaml        ← Optional (Database TLS)
+✅ 03d-syncer-certificate.yaml       ← Optional (Active-Active)
+✅ 03e-metrics-certificate.yaml      ← Optional (Prometheus TLS)
+
 ✅ 04-rec-cert-manager.yaml          ← Apply (creates REC with TLS)
 
-Rule: Apply ONLY ONE of the 02x files (02a OR 02b OR 02c OR 02d)
+Rules:
+- Apply ONLY ONE of the 02x files (02a OR 02b OR 02c OR 02d)
+- For certificates, either:
+  • Apply 03-rec-certificates.yaml (all at once), OR
+  • Apply individual 03x files (03a + 03b minimum, 03c/03d/03e optional)
 ```
 
 ---
@@ -212,8 +222,10 @@ kubectl describe clusterissuer selfsigned-issuer
 
 ### Step 3: Create Certificates (3 minutes)
 
+**Option A: Create all certificates at once (easiest)**
+
 ```bash
-# Create Certificate resources for Redis Enterprise
+# Create all Certificate resources for Redis Enterprise
 kubectl apply -f 03-rec-certificates.yaml
 
 # Watch certificates being issued
@@ -223,13 +235,66 @@ kubectl get certificate -n redis-enterprise -w
 # Press Ctrl+C to stop watching
 
 # Verify secrets were created
-kubectl get secret -n redis-enterprise | grep tls
+kubectl get secret -n redis-enterprise | grep cert
 
 # Expected output:
-# rec-api-tls      kubernetes.io/tls   3      1m
-# rec-cm-tls       kubernetes.io/tls   3      1m
-# rec-proxy-tls    kubernetes.io/tls   3      1m
+# rec-api-cert      kubernetes.io/tls   3      1m
+# rec-cm-cert       kubernetes.io/tls   3      1m
+# rec-proxy-cert    kubernetes.io/tls   3      1m
+# rec-syncer-cert   kubernetes.io/tls   3      1m
+# rec-metrics-cert  kubernetes.io/tls   3      1m
 ```
+
+**Option B: Create only required certificates (minimal)**
+
+```bash
+# Create only the required certificates for basic REC with TLS
+kubectl apply -f 03a-api-certificate.yaml
+kubectl apply -f 03b-cm-certificate.yaml
+
+# Watch certificates being issued
+kubectl get certificate -n redis-enterprise -w
+
+# Wait until both show READY=True (30-60 seconds)
+# Press Ctrl+C to stop watching
+
+# Verify secrets were created
+kubectl get secret -n redis-enterprise | grep cert
+
+# Expected output:
+# rec-api-cert      kubernetes.io/tls   3      1m
+# rec-cm-cert       kubernetes.io/tls   3      1m
+```
+
+**Option C: Create certificates selectively**
+
+```bash
+# Required certificates
+kubectl apply -f 03a-api-certificate.yaml
+kubectl apply -f 03b-cm-certificate.yaml
+
+# Optional: Add proxy certificate if you need database TLS
+kubectl apply -f 03c-proxy-certificate.yaml
+
+# Optional: Add syncer certificate if you need Active-Active
+# kubectl apply -f 03d-syncer-certificate.yaml
+
+# Optional: Add metrics certificate if Prometheus uses TLS
+# kubectl apply -f 03e-metrics-certificate.yaml
+
+# Watch certificates being issued
+kubectl get certificate -n redis-enterprise -w
+```
+
+**Certificate Requirements:**
+
+| Certificate | File | Required? | Used For |
+|-------------|------|-----------|----------|
+| **API** | 03a | ✅ Yes | Cluster Manager UI/API |
+| **CM** | 03b | ✅ Yes | Cluster Manager internal |
+| **Proxy** | 03c | ⚠️ Optional | Database TLS connections |
+| **Syncer** | 03d | ⚠️ Optional | Active-Active replication |
+| **Metrics** | 03e | ⚠️ Optional | Prometheus metrics TLS |
 
 ---
 
