@@ -109,6 +109,27 @@ cert-manager is a Kubernetes-native certificate management controller that autom
 
 ## 📦 Quick Start Guide
 
+### ⚠️ File Guide - What to Apply
+
+```
+Files in this directory:
+
+📄 01-install-cert-manager.yaml      ❌ DO NOT APPLY (documentation only)
+📄 02-cluster-issuer.yaml            ❌ DO NOT APPLY (documentation only)
+
+✅ 02a-selfsigned-issuer.yaml        ← Apply for lab/testing
+✅ 02b-ca-issuer.yaml                ← Apply if you have existing CA
+✅ 02c-vault-issuer.yaml             ← Apply if you have Vault
+✅ 02d-letsencrypt-issuer.yaml       ← Apply for public domains
+
+✅ 03-rec-certificates.yaml          ← Apply (creates certificates)
+✅ 04-rec-cert-manager.yaml          ← Apply (creates REC with TLS)
+
+Rule: Apply ONLY ONE of the 02x files (02a OR 02b OR 02c OR 02d)
+```
+
+---
+
 ### Prerequisites
 
 ```bash
@@ -155,6 +176,18 @@ kubectl get pods -n cert-manager
 
 ### Step 2: Create Certificate Issuer (2 minutes)
 
+**⚠️ IMPORTANT: Choose ONLY ONE issuer type based on your environment:**
+
+| File | Use When | Apply? |
+|------|----------|--------|
+| `02a-selfsigned-issuer.yaml` | Lab/Testing (no prerequisites) | ✅ **Use this for lab** |
+| `02b-ca-issuer.yaml` | You have existing CA infrastructure | ⚠️ Only if you have CA |
+| `02c-vault-issuer.yaml` | You have HashiCorp Vault | ⚠️ Only if you have Vault |
+| `02d-letsencrypt-issuer.yaml` | Public domain with Ingress | ⚠️ Only for public domains |
+| `02-cluster-issuer.yaml` | Documentation/reference | ❌ **DO NOT APPLY** |
+
+**For lab/testing, use 02a (self-signed):**
+
 ```bash
 # Create a self-signed ClusterIssuer for testing/lab
 kubectl apply -f 02a-selfsigned-issuer.yaml
@@ -171,12 +204,8 @@ kubectl describe clusterissuer selfsigned-issuer
 ```
 
 **Note:**
-- This creates a self-signed issuer for testing/lab environments
-- For other issuer types, use the appropriate file:
-  - `02a-selfsigned-issuer.yaml` - Self-signed (testing/lab) ← **You are here**
-  - `02b-ca-issuer.yaml` - Existing CA infrastructure
-  - `02c-vault-issuer.yaml` - HashiCorp Vault PKI
-  - `02d-letsencrypt-issuer.yaml` - Let's Encrypt (public domains)
+- ✅ Apply **ONLY ONE** of the 02x files (02a, 02b, 02c, or 02d)
+- ❌ **DO NOT** apply `02-cluster-issuer.yaml` (it's documentation only)
 - See [Certificate Issuers](#certificate-issuers) section for details on each type
 
 ---

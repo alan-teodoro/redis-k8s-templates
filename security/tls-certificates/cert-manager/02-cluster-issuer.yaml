@@ -1,4 +1,17 @@
 ---
+# ⚠️ DOCUMENTATION FILE - DO NOT APPLY DIRECTLY ⚠️
+#
+# This file contains examples of all issuer types for reference.
+# DO NOT run: kubectl apply -f 02-cluster-issuer.yaml
+#
+# Instead, use ONE of the specific issuer files:
+#   - 02a-selfsigned-issuer.yaml    (for lab/testing)
+#   - 02b-ca-issuer.yaml            (for existing CA)
+#   - 02c-vault-issuer.yaml         (for HashiCorp Vault)
+#   - 02d-letsencrypt-issuer.yaml   (for Let's Encrypt)
+#
+# ============================================================================
+#
 # ClusterIssuer for cert-manager
 #
 # ClusterIssuer is a cluster-wide resource that represents a certificate authority
@@ -9,9 +22,6 @@
 # 2. CA - For existing Certificate Authority
 # 3. Vault - For HashiCorp Vault integration
 # 4. ACME (Let's Encrypt) - For public-facing endpoints
-#
-# Usage:
-#   kubectl apply -f 02-cluster-issuer.yaml
 
 ---
 # 1. Self-Signed Issuer (Testing/Development)

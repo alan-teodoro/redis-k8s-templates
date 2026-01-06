@@ -1,4 +1,16 @@
 ---
+# ⚠️ DOCUMENTATION FILE - DO NOT APPLY DIRECTLY ⚠️
+#
+# This file contains installation instructions and examples.
+# DO NOT run: kubectl apply -f 01-install-cert-manager.yaml
+#
+# Instead, use the official cert-manager installation URL:
+#   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+#
+# Or see Method 2 and Method 3 below for Helm installation options.
+#
+# ============================================================================
+#
 # Install cert-manager on Kubernetes
 #
 # cert-manager is a Kubernetes-native certificate management controller
