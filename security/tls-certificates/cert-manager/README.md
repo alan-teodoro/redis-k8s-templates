@@ -125,7 +125,11 @@ kubectl get deployment redis-enterprise-operator -n redis-enterprise
 
 ```bash
 # Install cert-manager from official release
+# This creates the 'cert-manager' namespace and installs all components
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+
+# Verify namespace was created
+kubectl get namespace cert-manager
 
 # Wait for cert-manager to be ready
 kubectl wait --for=condition=ready pod \
@@ -143,7 +147,9 @@ kubectl get pods -n cert-manager
 # cert-manager-webhook-7d9f4d88d-xxxxx       1/1     Running   0          1m
 ```
 
-**Note:** See [01-install-cert-manager.yaml](01-install-cert-manager.yaml) for alternative installation methods (Helm, custom configuration).
+**Note:**
+- The official YAML automatically creates the `cert-manager` namespace
+- See [01-install-cert-manager.yaml](01-install-cert-manager.yaml) for alternative installation methods (Helm, custom configuration)
 
 ---
 
