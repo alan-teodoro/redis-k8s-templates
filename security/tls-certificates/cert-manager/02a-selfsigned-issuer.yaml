@@ -1,0 +1,30 @@
+---
+# Self-Signed ClusterIssuer for cert-manager
+#
+# This creates a self-signed certificate issuer for testing/development.
+# Certificates issued by this issuer will NOT be trusted by browsers/clients
+# without manual trust configuration.
+#
+# Use Case: Testing, development, internal lab environments
+#
+# For production, see 02-cluster-issuer.yaml for other issuer options:
+# - CA Issuer (existing Certificate Authority)
+# - Vault Issuer (HashiCorp Vault integration)
+# - ACME/Let's Encrypt (public-facing endpoints)
+#
+# Usage:
+#   kubectl apply -f 02a-selfsigned-issuer.yaml
+#
+# Verify:
+#   kubectl get clusterissuer selfsigned-issuer
+#   kubectl describe clusterissuer selfsigned-issuer
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+  labels:
+    app: cert-manager
+spec:
+  selfSigned: {}
+

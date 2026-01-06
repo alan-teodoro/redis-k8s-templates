@@ -156,8 +156,8 @@ kubectl get pods -n cert-manager
 ### Step 2: Create Certificate Issuer (2 minutes)
 
 ```bash
-# Create a self-signed ClusterIssuer
-kubectl apply -f 02-cluster-issuer.yaml
+# Create a self-signed ClusterIssuer for testing/lab
+kubectl apply -f 02a-selfsigned-issuer.yaml
 
 # Verify issuer is ready
 kubectl get clusterissuer
@@ -165,9 +165,14 @@ kubectl get clusterissuer
 # Expected output:
 # NAME                READY   AGE
 # selfsigned-issuer   True    10s
+
+# Verify issuer details
+kubectl describe clusterissuer selfsigned-issuer
 ```
 
-**Note:** This creates a self-signed issuer for testing. For production, see [Certificate Issuers](#certificate-issuers) section below.
+**Note:**
+- This creates a self-signed issuer for testing/lab environments
+- For production or other issuer types (CA, Vault, Let's Encrypt), see [02-cluster-issuer.yaml](02-cluster-issuer.yaml) and [Certificate Issuers](#certificate-issuers) section below
 
 ---
 
