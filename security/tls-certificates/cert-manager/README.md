@@ -107,15 +107,31 @@ cert-manager is a Kubernetes-native certificate management controller that autom
 
 ---
 
-## 📦 Installation
+## 📦 Quick Start Guide
 
-### Step 1: Install cert-manager
-
-See: [01-install-cert-manager.yaml](01-install-cert-manager.yaml)
+### Prerequisites
 
 ```bash
-# Install cert-manager CRDs and controller
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+# Verify you have a Kubernetes cluster
+kubectl cluster-info
+
+# Verify Redis Enterprise Operator is installed
+kubectl get deployment redis-enterprise-operator -n redis-enterprise
+```
+
+---
+
+### Step 1: Install cert-manager (5 minutes)
+
+```bash
+# Install cert-manager using the template
+kubectl apply -f 01-install-cert-manager.yaml
+
+# Wait for cert-manager to be ready
+kubectl wait --for=condition=ready pod \
+  -l app.kubernetes.io/instance=cert-manager \
+  -n cert-manager \
+  --timeout=300s
 
 # Verify installation
 kubectl get pods -n cert-manager
@@ -127,9 +143,210 @@ kubectl get pods -n cert-manager
 # cert-manager-webhook-7d9f4d88d-xxxxx       1/1     Running   0          1m
 ```
 
-### Step 2: Verify Installation
+---
+
+### Step 2: Create Certificate Issuer (2 minutes)
 
 ```bash
+# Create a self-signed ClusterIssuer
+kubectl apply -f 02-cluster-issuer.yaml
+
+# Verify issuer is ready
+kubectl get clusterissuer
+
+# Expected output:
+# NAME                READY   AGE
+# selfsigned-issuer   True    10s
+```
+
+**Note:** This creates a self-signed issuer for testing. For production, see [Certificate Issuers](#certificate-issuers) section below.
+
+---
+
+### Step 3: Create Certificates (3 minutes)
+
+```bash
+# Create Certificate resources for Redis Enterprise
+kubectl apply -f 03-rec-certificates.yaml
+
+# Watch certificates being issued
+kubectl get certificate -n redis-enterprise -w
+
+# Wait until all show READY=True (30-60 seconds)
+# Press Ctrl+C to stop watching
+
+# Verify secrets were created
+kubectl get secret -n redis-enterprise | grep tls
+
+# Expected output:
+# rec-api-tls      kubernetes.io/tls   3      1m
+# rec-cm-tls       kubernetes.io/tls   3      1m
+# rec-proxy-tls    kubernetes.io/tls   3      1m
+```
+
+---
+
+### Step 4: Configure REC with TLS (5 minutes)
+
+**Option A: New REC (recommended for testing)**
+
+```bash
+# Deploy REC with TLS enabled
+kubectl apply -f 04-rec-cert-manager.yaml
+
+# Wait for REC to be ready (5-10 minutes)
+kubectl wait --for=condition=Ready rec/rec -n redis-enterprise --timeout=600s
+
+# Verify REC is using TLS
+kubectl get rec rec -n redis-enterprise -o yaml | grep -A10 certificates
+```
+
+**Option B: Existing REC**
+
+```bash
+# Edit your existing REC
+kubectl edit rec <your-rec-name> -n redis-enterprise
+
+# Add this section under spec:
+#   certificates:
+#     apiCertificateSecretName: rec-api-tls
+#     cmCertificateSecretName: rec-cm-tls
+
+# Save and exit. REC will reload with new certificates.
+```
+
+---
+
+### Step 5: Verify TLS is Working (5 minutes)
+
+```bash
+# 1. Check REC status
+kubectl get rec -n redis-enterprise
+
+# 2. Get REC UI service
+kubectl get svc -n redis-enterprise | grep ui
+
+# 3. Port-forward to REC UI (HTTPS)
+kubectl port-forward svc/rec-ui -n redis-enterprise 8443:8443
+
+# 4. Open browser to https://localhost:8443
+# You'll see a certificate warning (expected for self-signed)
+# Click "Advanced" → "Proceed" to access the UI
+
+# 5. Check certificate in browser
+# - Click the lock icon in address bar
+# - View certificate details
+# - Should show: Issuer = selfsigned-issuer
+```
+
+---
+
+### Step 6: Create Database with TLS (10 minutes)
+
+```bash
+# Create password secret
+kubectl create secret generic redis-db-tls-password \
+  --from-literal=password=MySecurePassword123! \
+  -n redis-enterprise
+
+# Create database with TLS enabled
+cat <<EOF | kubectl apply -f -
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: redis-db-tls
+  namespace: redis-enterprise
+spec:
+  memorySize: 100MB
+  tlsMode:
+    clientTLS: true
+  databaseSecretName: redis-db-tls-password
+EOF
+
+# Wait for database to be ready
+kubectl wait --for=condition=Ready redb/redis-db-tls -n redis-enterprise --timeout=300s
+
+# Get database connection info
+kubectl get redb redis-db-tls -n redis-enterprise
+```
+
+---
+
+### Step 7: Test TLS Connection (5 minutes)
+
+```bash
+# Get database service and port
+DB_SERVICE=$(kubectl get redb redis-db-tls -n redis-enterprise -o jsonpath='{.status.databaseURL}' | cut -d: -f1)
+DB_PORT=$(kubectl get redb redis-db-tls -n redis-enterprise -o jsonpath='{.status.databaseURL}' | cut -d: -f2)
+
+# Port-forward to database
+kubectl port-forward svc/$DB_SERVICE -n redis-enterprise $DB_PORT:$DB_PORT &
+
+# Test connection with TLS (requires redis-cli with TLS support)
+redis-cli -h localhost -p $DB_PORT --tls --insecure -a MySecurePassword123! PING
+
+# Expected output: PONG
+
+# Test without TLS (should fail)
+redis-cli -h localhost -p $DB_PORT -a MySecurePassword123! PING
+
+# Expected output: Error (connection refused or protocol error)
+
+# Stop port-forward
+kill %1
+```
+
+---
+
+### Step 8: Monitor Certificate Renewal (Optional)
+
+```bash
+# Check certificate expiry
+kubectl get certificate -n redis-enterprise -o wide
+
+# Check when cert-manager will renew (at 2/3 of lifetime)
+kubectl describe certificate rec-api-tls -n redis-enterprise | grep "Renewal Time"
+
+# For testing auto-renewal, delete the secret
+kubectl delete secret rec-api-tls -n redis-enterprise
+
+# Watch cert-manager recreate it automatically
+kubectl get secret rec-api-tls -n redis-enterprise -w
+
+# Should appear within 30 seconds
+```
+
+---
+
+## ✅ Success Criteria
+
+After completing the quick start, you should have:
+
+- ✅ cert-manager installed and running
+- ✅ ClusterIssuer created (self-signed)
+- ✅ Certificates automatically generated
+- ✅ REC configured with TLS
+- ✅ REC UI accessible via HTTPS
+- ✅ Database created with TLS enabled
+- ✅ Verified TLS connection to database
+
+**Total Time: ~30-40 minutes**
+
+---
+
+## 📦 Detailed Installation
+
+### Install cert-manager
+
+See: [01-install-cert-manager.yaml](01-install-cert-manager.yaml)
+
+```bash
+# Install cert-manager CRDs and controller
+kubectl apply -f 01-install-cert-manager.yaml
+
+# Verify installation
+kubectl get pods -n cert-manager
+
 # Check cert-manager CRDs
 kubectl get crd | grep cert-manager
 
