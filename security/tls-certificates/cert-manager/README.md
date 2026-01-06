@@ -172,7 +172,12 @@ kubectl describe clusterissuer selfsigned-issuer
 
 **Note:**
 - This creates a self-signed issuer for testing/lab environments
-- For production or other issuer types (CA, Vault, Let's Encrypt), see [02-cluster-issuer.yaml](02-cluster-issuer.yaml) and [Certificate Issuers](#certificate-issuers) section below
+- For other issuer types, use the appropriate file:
+  - `02a-selfsigned-issuer.yaml` - Self-signed (testing/lab) ← **You are here**
+  - `02b-ca-issuer.yaml` - Existing CA infrastructure
+  - `02c-vault-issuer.yaml` - HashiCorp Vault PKI
+  - `02d-letsencrypt-issuer.yaml` - Let's Encrypt (public domains)
+- See [Certificate Issuers](#certificate-issuers) section for details on each type
 
 ---
 
@@ -385,43 +390,66 @@ See [01-install-cert-manager.yaml](01-install-cert-manager.yaml) for Helm instal
 
 ## 🔑 Certificate Issuers
 
-cert-manager supports multiple certificate issuers:
+cert-manager supports multiple certificate issuers. Each issuer type has a dedicated YAML file:
 
 ### 1. Self-Signed Issuer (Testing/Development)
 
-See: [02-cluster-issuer.yaml](02-cluster-issuer.yaml) - SelfSigned section
+**File:** [02a-selfsigned-issuer.yaml](02a-selfsigned-issuer.yaml)
 
-**Use Case:** Testing, development, internal environments
+**Use Case:** Testing, development, internal lab environments
 
 **Pros:**
 - ✅ No external dependencies
 - ✅ Fast certificate issuance
 - ✅ No cost
+- ✅ No prerequisites
 
 **Cons:**
 - ❌ Not trusted by browsers/clients
 - ❌ Manual trust configuration required
 - ❌ Not suitable for production
 
-### 2. Let's Encrypt (Public-Facing)
+**Usage:**
+```bash
+kubectl apply -f 02a-selfsigned-issuer.yaml
+```
 
-See: [02-cluster-issuer.yaml](02-cluster-issuer.yaml) - Let's Encrypt section
+---
 
-**Use Case:** Public-facing endpoints with valid domain names
+### 2. CA Issuer (Existing Certificate Authority)
+
+**File:** [02b-ca-issuer.yaml](02b-ca-issuer.yaml)
+
+**Use Case:** Existing CA infrastructure, enterprise PKI
 
 **Pros:**
-- ✅ Free certificates
-- ✅ Trusted by all browsers/clients
-- ✅ Automatic renewal
+- ✅ Use existing CA
+- ✅ Trusted within organization
+- ✅ Full control over certificates
 
 **Cons:**
-- ❌ Requires public DNS
-- ❌ Rate limits (50 certs/week per domain)
-- ❌ Domain validation required
+- ❌ Manual CA management
+- ❌ CA certificate must be in Kubernetes secret
+
+**Prerequisites:**
+```bash
+# Create secret with CA certificate and key
+kubectl create secret tls ca-key-pair \
+  --cert=ca.crt \
+  --key=ca.key \
+  -n cert-manager
+```
+
+**Usage:**
+```bash
+kubectl apply -f 02b-ca-issuer.yaml
+```
+
+---
 
 ### 3. HashiCorp Vault (Enterprise PKI)
 
-See: [02-cluster-issuer.yaml](02-cluster-issuer.yaml) - Vault section
+**File:** [02c-vault-issuer.yaml](02c-vault-issuer.yaml)
 
 **Use Case:** Enterprise environments with existing Vault infrastructure
 
@@ -436,20 +464,61 @@ See: [02-cluster-issuer.yaml](02-cluster-issuer.yaml) - Vault section
 - ❌ More complex setup
 - ❌ Additional cost
 
-### 4. CA Issuer (Existing CA)
+**Prerequisites:**
+- Vault server running and accessible
+- PKI secrets engine enabled
+- Kubernetes auth configured
 
-See: [02-cluster-issuer.yaml](02-cluster-issuer.yaml) - CA section
+See [02c-vault-issuer.yaml](02c-vault-issuer.yaml) for detailed Vault setup commands.
 
-**Use Case:** Existing Certificate Authority infrastructure
+**Usage:**
+```bash
+kubectl apply -f 02c-vault-issuer.yaml
+```
+
+---
+
+### 4. Let's Encrypt (Public-Facing)
+
+**File:** [02d-letsencrypt-issuer.yaml](02d-letsencrypt-issuer.yaml)
+
+**Use Case:** Public-facing endpoints with valid domain names
 
 **Pros:**
-- ✅ Use existing CA
-- ✅ Trusted within organization
-- ✅ Full control over certificates
+- ✅ Free certificates
+- ✅ Trusted by all browsers/clients
+- ✅ Automatic renewal
 
 **Cons:**
-- ❌ Manual CA management
-- ❌ CA certificate must be in Kubernetes secret
+- ❌ Requires public DNS
+- ❌ Rate limits (50 certs/week per domain)
+- ❌ Domain validation required
+
+**Prerequisites:**
+- Public domain name
+- DNS configured
+- Ingress controller installed
+
+**Usage:**
+```bash
+# Test with staging first (no rate limits)
+kubectl apply -f 02d-letsencrypt-issuer.yaml
+
+# Creates both letsencrypt-staging and letsencrypt-prod issuers
+```
+
+---
+
+### Issuer Comparison Table
+
+| Issuer Type | File | Use Case | Trusted? | Prerequisites |
+|-------------|------|----------|----------|---------------|
+| **Self-Signed** | 02a | Lab/Testing | ❌ No | None |
+| **CA** | 02b | Enterprise PKI | ✅ Internal | CA cert/key |
+| **Vault** | 02c | Enterprise PKI | ✅ Internal | Vault setup |
+| **Let's Encrypt** | 02d | Public domains | ✅ Public | Domain + Ingress |
+
+**For documentation/reference:** See [02-cluster-issuer.yaml](02-cluster-issuer.yaml) for all issuer examples in one file.
 
 ---
 

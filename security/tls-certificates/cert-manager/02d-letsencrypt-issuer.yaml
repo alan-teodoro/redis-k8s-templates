@@ -1,0 +1,124 @@
+---
+# Let's Encrypt ClusterIssuer for cert-manager
+#
+# This creates certificate issuers using Let's Encrypt ACME protocol.
+# Use this for public-facing endpoints with valid domain names.
+#
+# Use Case: Public-facing endpoints, free trusted certificates
+#
+# Prerequisites:
+# 1. Public domain name
+# 2. DNS configured to point to your cluster
+# 3. Ingress controller installed (nginx, traefik, etc.)
+# 4. HTTP01 or DNS01 challenge support
+#
+# Let's Encrypt Environments:
+# - Production: Trusted certificates, rate limits apply (50 certs/week per domain)
+# - Staging: Test certificates (not trusted), no rate limits
+#
+# IMPORTANT: Test with staging first to avoid hitting rate limits!
+#
+# Usage:
+#   # Test with staging first:
+#   kubectl apply -f 02d-letsencrypt-issuer.yaml
+#   
+#   # Create a test certificate using letsencrypt-staging
+#   # Once working, switch to letsencrypt-prod
+#
+# Verify:
+#   kubectl get clusterissuer
+#   kubectl describe clusterissuer letsencrypt-staging
+#   kubectl describe clusterissuer letsencrypt-prod
+
+---
+# Let's Encrypt Staging (for testing)
+#
+# Use this first to test your setup without hitting rate limits.
+# Certificates issued by staging are NOT trusted by browsers.
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  labels:
+    app: cert-manager
+spec:
+  acme:
+    # Let's Encrypt staging server
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    
+    # Email for certificate expiry notifications
+    # CHANGE THIS to your email address
+    email: admin@example.com
+    
+    # Secret to store ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    
+    # HTTP01 challenge (requires Ingress)
+    solvers:
+      - http01:
+          ingress:
+            class: nginx  # Change to your ingress class (nginx, traefik, etc.)
+
+---
+# Let's Encrypt Production
+#
+# Use this after testing with staging.
+# Certificates issued by production are trusted by all browsers.
+# Rate limits: 50 certificates per week per domain.
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  labels:
+    app: cert-manager
+spec:
+  acme:
+    # Let's Encrypt production server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    
+    # Email for certificate expiry notifications
+    # CHANGE THIS to your email address
+    email: admin@example.com
+    
+    # Secret to store ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    
+    # HTTP01 challenge (requires Ingress)
+    solvers:
+      - http01:
+          ingress:
+            class: nginx  # Change to your ingress class (nginx, traefik, etc.)
+
+---
+# Alternative: DNS01 Challenge (for wildcard certificates)
+#
+# Uncomment and use this if you need wildcard certificates (*.example.com)
+# or if HTTP01 is not available.
+#
+# Requires DNS provider credentials (Route53, CloudFlare, etc.)
+#
+# Example for AWS Route53:
+#
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: letsencrypt-dns01
+# spec:
+#   acme:
+#     server: https://acme-v02.api.letsencrypt.org/directory
+#     email: admin@example.com
+#     privateKeySecretRef:
+#       name: letsencrypt-dns01-account-key
+#     solvers:
+#       - dns01:
+#           route53:
+#             region: us-east-1
+#             accessKeyID: AKIAIOSFODNN7EXAMPLE
+#             secretAccessKeySecretRef:
+#               name: route53-credentials
+#               key: secret-access-key
+

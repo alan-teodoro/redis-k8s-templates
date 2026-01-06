@@ -1,0 +1,87 @@
+---
+# HashiCorp Vault ClusterIssuer for cert-manager
+#
+# This creates a certificate issuer using HashiCorp Vault PKI.
+# Use this when you have Vault infrastructure for enterprise PKI.
+#
+# Use Case: Enterprise environments with Vault, centralized PKI management
+#
+# Prerequisites:
+# 1. Vault server running and accessible
+# 2. PKI secrets engine enabled in Vault
+# 3. Vault authentication configured (Kubernetes auth method)
+#
+# Vault Setup Commands:
+#
+# 1. Enable PKI secrets engine:
+#    vault secrets enable pki
+#
+# 2. Configure PKI:
+#    vault secrets tune -max-lease-ttl=87600h pki
+#
+# 3. Generate root CA:
+#    vault write pki/root/generate/internal \
+#      common_name="Redis Enterprise CA" \
+#      ttl=87600h
+#
+# 4. Configure PKI role:
+#    vault write pki/roles/redis-enterprise \
+#      allowed_domains="redis.example.com,redis-enterprise.svc.cluster.local" \
+#      allow_subdomains=true \
+#      allow_glob_domains=true \
+#      max_ttl=2160h
+#
+# 5. Enable Kubernetes auth:
+#    vault auth enable kubernetes
+#
+# 6. Configure Kubernetes auth:
+#    vault write auth/kubernetes/config \
+#      kubernetes_host="https://kubernetes.default.svc:443"
+#
+# 7. Create policy:
+#    vault policy write cert-manager - <<EOF
+#    path "pki/sign/redis-enterprise" {
+#      capabilities = ["create", "update"]
+#    }
+#    EOF
+#
+# 8. Create role:
+#    vault write auth/kubernetes/role/cert-manager \
+#      bound_service_account_names=cert-manager \
+#      bound_service_account_namespaces=cert-manager \
+#      policies=cert-manager \
+#      ttl=1h
+#
+# Usage:
+#   kubectl apply -f 02c-vault-issuer.yaml
+#
+# Verify:
+#   kubectl get clusterissuer vault-issuer
+#   kubectl describe clusterissuer vault-issuer
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: vault-issuer
+  labels:
+    app: cert-manager
+spec:
+  vault:
+    # Vault server URL (change to your Vault server)
+    server: https://vault.vault.svc.cluster.local:8200
+    
+    # Vault PKI path
+    path: pki/sign/redis-enterprise
+    
+    # Vault CA bundle (optional, base64-encoded CA certificate)
+    # Uncomment and set if using custom CA for Vault
+    # caBundle: <base64-encoded-ca-cert>
+    
+    # Kubernetes authentication
+    auth:
+      kubernetes:
+        role: cert-manager
+        mountPath: /v1/auth/kubernetes
+        serviceAccountRef:
+          name: cert-manager  # Service account in cert-manager namespace
+
