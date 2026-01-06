@@ -50,7 +50,7 @@ spec:
   
   # Services configuration
   servicesRiggerSpec:
-    databaseServiceType: ClusterIP
+    databaseServiceType: cluster_ip  # Options: cluster_ip, headless, load_balancer
     serviceNaming: bdb_name
   
   # ============================================
