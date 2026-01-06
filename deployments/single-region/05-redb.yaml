@@ -20,7 +20,7 @@ spec:
   type: redis
 
   # Enable TLS
-  tlsMode: enabled
+  #tlsMode: enabled
 
   # Memory allocation
   memorySize: 1GB
@@ -42,13 +42,13 @@ spec:
   # Eviction policy
   # Options: volatile-lru | allkeys-lru | volatile-lfu | allkeys-lfu | volatile-random | allkeys-random | volatile-ttl | noeviction
   # noeviction = return errors when memory limit reached (good for testing)
-  evictionPolicy: noeviction
+  evictionPolicy: volatile-lru
 
   # Database password from secret
   databaseSecretName: redb-secret
 
   # Enable RESP3 protocol support
-  resp3: true
+  #resp3: true
 
   # Default user enabled
   defaultUser: true

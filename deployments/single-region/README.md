@@ -81,7 +81,7 @@ kubectl apply -f 00-namespace.yaml
 kubectl apply -f 01-rec-admin-secret.yaml
 kubectl apply -f 02-redb-secret.yaml
 
-# 3. Apply RBAC for rack awareness (optional - see note below)
+# 3. Apply RBAC for rack awareness (optional - see note below before applying, it needs to be edited since it shows a rec example)
 kubectl apply -f 03-rbac-rack-awareness.yaml
 
 # 📝 Note on Rack Awareness:

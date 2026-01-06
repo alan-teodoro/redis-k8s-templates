@@ -146,6 +146,26 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 - **NEVER use NFS storage for persistence** - only block storage (EBS, PD, Azure Disk)
 - **NEVER change PVC after deployment** (possible from 7.4+, but avoid)
 
+### Storage Configuration
+
+✅ **DO:**
+- **Use block storage only** (EBS, Azure Managed Disks, GCP Persistent Disks)
+- Use EXT4 or XFS file systems
+- **Omit volumeSize** in REC spec (defaults to 5x memory - recommended)
+- Use appropriate storage classes per cloud:
+  - AWS: `gp3` (recommended) or `gp2`
+  - GCP: `standard` or `pd-ssd`
+  - Azure: `managed-premium` (SSD) or `default` (HDD)
+- Verify storage class supports volume expansion (`AllowVolumeExpansion: true`)
+- Calculate volume size: **5x memory size** (e.g., 15GB memory = 75GB volume)
+
+❌ **DON'T:**
+- **NEVER use NFS, NFS-like, or multi-read-write storage** (causes locking issues)
+- **NEVER use shared storage** (incompatible with database requirements)
+- Change storage class after deployment (not supported)
+- Use volumeSize smaller than 5x memory
+- Reduce PVC size after creation (not supported)
+
 ### Disaster Recovery
 
 ✅ **DO:**
@@ -239,29 +259,45 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 
 ✅ **DO:**
 - Set **soft eviction threshold HIGHER** than hard eviction threshold
+  - Example: soft=85%, hard=90% (soft triggers earlier warning)
 - Set **eviction-soft-grace-period** high enough for administrator to scale cluster
+  - Recommended: 5-10 minutes minimum
 - Set **eviction-max-pod-grace-period** high enough for Redis to migrate databases
-- Configure platform-specific eviction settings (OpenShift, GKE, EKS)
+  - Recommended: 10-15 minutes minimum
+- Configure platform-specific eviction settings:
+  - **OpenShift**: Edit kubelet config file
+  - **GKE**: Use managed settings in node pool config
+  - **EKS**: Configure kubelet via user data or launch template
 - Monitor node conditions (MemoryPressure, DiskPressure)
+  - Command: `kubectl get nodes -o jsonpath='{range .items[*]}name:{.metadata.name}{"\t"}MemoryPressure:{.status.conditions[?(@.type == "MemoryPressure")].status}{"\t"}DiskPressure:{.status.conditions[?(@.type == "DiskPressure")].status}{"\n"}{end}'`
 
 ❌ **DON'T:**
 - Use default eviction thresholds without review
 - Set grace periods too low (causes forced pod termination)
 - Ignore MemoryPressure or DiskPressure warnings
+- Set soft threshold lower than hard threshold (defeats early warning purpose)
 
 ### Resource Quotas
 
 ✅ **DO:**
 - Apply ResourceQuota to prevent runaway resource consumption
 - Calculate quota based on: REC nodes + operator + databases + buffer
+- **Operator minimum resources:**
+  - CPU: 500m (0.5 cores)
+  - Memory: 256Mi
+- **Example calculation for 3-node REC:**
+  - REC nodes: 3 × 4000m CPU + 3 × 15Gi memory = 12000m CPU + 45Gi memory
+  - Operator: 500m CPU + 256Mi memory
+  - Buffer (20%): 2500m CPU + 9Gi memory
+  - **Total quota: 15000m CPU + 54Gi memory**
 - Monitor quota usage regularly
 - Adjust quota as workload grows
-- Include operator minimum resources (500m CPU, 256Mi memory) in calculations
 
 ❌ **DON'T:**
 - Deploy without resource quotas in multi-tenant environments
 - Set quota too tight (prevents scaling)
 - Forget to include operator resources in quota calculations
+- Forget to include buffer for overhead and scaling
 
 ---
 
@@ -415,6 +451,8 @@ Comprehensive best practices guide for production Redis Enterprise deployments o
 
 ## 📚 Related Documentation
 
+- **[Validation Runbook](VALIDATION-RUNBOOK.md)** - Step-by-step commands to test and validate each best practice
+- **[Implementation Review Guide](IMPLEMENTATION-REVIEW-GUIDE.md)** - Complete meeting preparation guide for Redis Enterprise implementation reviews (AWS EKS | GCP GKE | Azure AKS | OpenShift)
 - [Security](../security/README.md)
 - [HA & Disaster Recovery](../operations/ha-disaster-recovery/README.md)
 - [Monitoring](../observability/monitoring/README.md)

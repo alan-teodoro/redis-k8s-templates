@@ -2,7 +2,6 @@
 #
 # This configuration creates a 3-node Redis Enterprise cluster with:
 # - Rack awareness enabled for zone distribution
-# - gp3 storage (recommended for EKS)
 # - Resource allocation for 2 vCPU / 8Gi memory nodes
 # - Persistent storage enabled (required for production)
 #
@@ -69,7 +68,7 @@ spec:
   # Rack awareness for zone distribution
   # Uses the standard Kubernetes zone label
   # Ensures pods and shards are distributed across availability zones
-  rackAwarenessNodeLabel: topology.kubernetes.io/zone
+  #rackAwarenessNodeLabel: topology.kubernetes.io/zone
   
   # Username for the cluster admin
   # Password is stored in the secret 'rec' (01-rec-admin-secret.yaml)
@@ -77,11 +76,11 @@ spec:
   
   # UI service type (ClusterIP for internal access only)
   # Change to LoadBalancer for external access
-  uiServiceType: ClusterIP
+  #uiServiceType: ClusterIP
 
   # Services rigger configuration
   # Controls how database services are created
-  servicesRiggerSpec:
-    databaseServiceType: cluster_ip
-    serviceNaming: bdb_name
+  #servicesRiggerSpec:
+    #databaseServiceType: cluster_ip
+    #serviceNaming: bdb_name
 
