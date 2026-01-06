@@ -32,23 +32,21 @@ spec:
   # Redis Enterprise version
   redisEnterpriseNodeResources:
     limits:
-      cpu: "4"
-      memory: 8Gi
+      cpu: "1"
+      memory: 4Gi
     requests:
-      cpu: "2"
-      memory: 8Gi
+      cpu: "1"
+      memory: 4Gi
   
   # Persistent storage
   persistentSpec:
     enabled: true
-    storageClassName: "gp3"  # Change to your storage class
-    volumeSize: 100Gi
   
   # Redis Enterprise image
   redisEnterpriseImageSpec:
     imagePullPolicy: IfNotPresent
     repository: redislabs/redis
-    versionTag: 8.0.6-8  # Latest Redis Enterprise 8.0
+    versionTag: 8.0.6-54  # Latest Redis Enterprise 8.0
   
   # Services configuration
   servicesRiggerSpec:
@@ -72,24 +70,24 @@ spec:
     
     # Proxy Certificate (client-to-database connections)
     # Secret created by: Certificate/rec-proxy-cert
-    proxyCertificateSecretName: rec-proxy-cert
+    #proxyCertificateSecretName: rec-proxy-cert
     
     # Syncer Certificate (Active-Active replication)
     # Secret created by: Certificate/rec-syncer-cert
     # Optional: Only needed for Active-Active deployments
-    syncerCertificateSecretName: rec-syncer-cert
+    #syncerCertificateSecretName: rec-syncer-cert
     
     # Metrics Exporter Certificate (Prometheus)
     # Secret created by: Certificate/rec-metrics-cert
     # Optional: Only needed if Prometheus uses TLS
-    metricsExporterCertificateSecretName: rec-metrics-cert
+    #metricsExporterCertificateSecretName: rec-metrics-cert
   
   # ============================================
   # Internode Encryption (TLS between nodes)
   # ============================================
   # Uses the same certificate as CM for internode communication
   clusterCredentialSecretName: rec-cm-cert
-  clusterCredentialSecretType: cert
+  #clusterCredentialSecretType: cert
   
   # ============================================
   # Additional Configuration
