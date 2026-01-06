@@ -1,225 +1,228 @@
 # Kubernetes RBAC for Redis Enterprise
 
-Implement Role-Based Access Control (RBAC) for Redis Enterprise on Kubernetes.
+## ⚠️ **Do You Need Custom RBAC?**
 
-## 📋 Table of Contents
+**The Redis Enterprise Operator Helm chart and bundle ALREADY INCLUDE all necessary RBAC.**
 
-- [Overview](#overview)
-- [RBAC Components](#rbac-components)
-- [Implementation](#implementation)
-- [Use Cases](#use-cases)
-- [Verification](#verification)
-- [Best Practices](#best-practices)
+When you install the operator, it automatically creates:
+- ✅ ServiceAccount for the operator
+- ✅ Role/ClusterRole with required permissions
+- ✅ RoleBinding/ClusterRoleBinding
 
----
-
-## 🎯 Overview
-
-Kubernetes RBAC controls access to Kubernetes API resources.
-
-**Benefits:**
-- ✅ Principle of least privilege
-- ✅ Separation of duties
-- ✅ Audit trail
-- ✅ Compliance requirements
+**You do NOT need to apply any RBAC manually unless you have specific requirements.**
 
 ---
 
-## 🔐 RBAC Components
+## ❌ **You DON'T Need Custom RBAC If:**
 
-### 1. ServiceAccount
-Identity for pods and processes.
+- Dedicated Kubernetes cluster for Redis Enterprise
+- Small team (< 10 people) with admin access
+- Dev/test environment
+- Everyone has cluster-admin permissions
 
-### 2. Role / ClusterRole
-Defines permissions (what can be done).
-
-### 3. RoleBinding / ClusterRoleBinding
-Binds roles to subjects (who can do it).
+**→ Skip this section entirely. The operator's built-in RBAC is sufficient.**
 
 ---
 
-## 🏗️ RBAC Architecture
+## ✅ **You NEED Custom RBAC Only If:**
 
+### **1. Multi-Tenant Cluster (Shared with Other Teams)**
+
+**Scenario:** Kubernetes cluster shared by multiple teams/applications.
+
+**Example:**
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    RBAC Architecture                         │
-│                                                              │
-│  ┌──────────────┐      ┌──────────────┐      ┌───────────┐ │
-│  │ ServiceAccount│ ───▶ │ RoleBinding  │ ───▶ │   Role    │ │
-│  │   (Who)       │      │   (Binds)    │      │  (What)   │ │
-│  └──────────────┘      └──────────────┘      └───────────┘ │
-│                                                              │
-│  Example:                                                    │
-│  redis-operator ────▶ operator-binding ────▶ operator-role  │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+├── namespace: redis-enterprise (Platform Team)
+├── namespace: app-team-a (Application Team A)
+├── namespace: app-team-b (Application Team B)
+└── namespace: monitoring (SRE Team)
+```
+
+**Solution:** Use custom RBAC to:
+- Allow monitoring team (Prometheus) read-only access → [examples/readonly-rbac.yaml](examples/readonly-rbac.yaml)
+- Allow app teams to create databases but not modify cluster → [examples/developer-rbac.yaml](examples/developer-rbac.yaml)
+- Restrict platform team to manage cluster only → [examples/admin-rbac.yaml](examples/admin-rbac.yaml)
+
+---
+
+### **2. Compliance Requirements (SOC2, HIPAA, PCI-DSS)**
+
+**Scenario:** You need to prove separation of duties and least privilege for audits.
+
+**Solution:** Implement granular RBAC with:
+- Separate roles for different responsibilities
+- Audit trail of who can do what
+- Documentation for compliance auditors
+
+See: [examples/](examples/) for reference implementations.
+
+---
+
+### **3. Self-Service Database Provisioning**
+
+**Scenario:** Developers create databases via GitOps (ArgoCD/Flux) or CI/CD pipelines.
+
+**Example:**
+```yaml
+# CI/CD pipeline ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: database-provisioner
+  namespace: redis-enterprise
+---
+# Bind to developer role (can create REDB, cannot modify REC)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: database-provisioner
+  namespace: redis-enterprise
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: redis-developer
+subjects:
+  - kind: ServiceAccount
+    name: database-provisioner
+    namespace: redis-enterprise
+```
+
+**Solution:** Use [examples/developer-rbac.yaml](examples/developer-rbac.yaml) to:
+- Allow creating/updating/deleting REDB (databases)
+- Prevent modifying REC (cluster configuration)
+- Prevent accessing secrets
+
+---
+
+### **4. Large Organization (100+ Developers)**
+
+**Scenario:** Multiple teams need different levels of access.
+
+**Teams:**
+- **Platform Team:** Manages Redis Enterprise Cluster (REC)
+- **Application Teams:** Create databases (REDB)
+- **SRE Team:** Read-only monitoring access
+- **Security Team:** Audit access
+
+**Solution:** Implement role-based access:
+- Platform Team → [examples/admin-rbac.yaml](examples/admin-rbac.yaml)
+- Application Teams → [examples/developer-rbac.yaml](examples/developer-rbac.yaml)
+- SRE Team → [examples/readonly-rbac.yaml](examples/readonly-rbac.yaml)
+
+---
+
+## 📦 **What's Included in Operator RBAC (Automatic)**
+
+When you install the operator via Helm or bundle, it creates:
+
+```yaml
+# ServiceAccount (automatically created)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: redis-enterprise-operator
+  namespace: redis-enterprise
+
+---
+# Role (automatically created)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: redis-enterprise-operator
+  namespace: redis-enterprise
+rules:
+  - apiGroups: ["app.redislabs.com"]
+    resources: ["redisenterpriseclusters", "redisenterprisedatabases"]
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "secrets", "configmaps", "persistentvolumeclaims"]
+    verbs: ["*"]
+  # ... (full permissions for operator to function)
+
+---
+# RoleBinding (automatically created)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: redis-enterprise-operator
+  namespace: redis-enterprise
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: redis-enterprise-operator
+subjects:
+  - kind: ServiceAccount
+    name: redis-enterprise-operator
+    namespace: redis-enterprise
+```
+
+**You don't need to create this manually!**
+
+---
+
+## 📚 **Custom RBAC Examples**
+
+If you determined you need custom RBAC, see the [examples/](examples/) directory:
+
+- **[readonly-rbac.yaml](examples/readonly-rbac.yaml)** - For monitoring tools (Prometheus, Grafana)
+- **[developer-rbac.yaml](examples/developer-rbac.yaml)** - For application teams (create databases only)
+- **[admin-rbac.yaml](examples/admin-rbac.yaml)** - For platform teams (full access)
+
+**⚠️ These are EXAMPLES. Adapt them to your specific requirements.**
+
+---
+
+## 🔍 **Verification**
+
+### Check Operator RBAC (Automatically Created)
+
+```bash
+# Check ServiceAccount
+kubectl get serviceaccount -n redis-enterprise | grep operator
+
+# Check Role
+kubectl get role -n redis-enterprise | grep operator
+
+# Check RoleBinding
+kubectl get rolebinding -n redis-enterprise | grep operator
+
+# Verify operator has permissions
+kubectl auth can-i create redb \
+  --as=system:serviceaccount:redis-enterprise:redis-enterprise-operator \
+  -n redis-enterprise
+# Should return: yes
+```
+
+### Test Custom RBAC (If You Created It)
+
+```bash
+# Test developer role (can create databases)
+kubectl auth can-i create redb \
+  --as=system:serviceaccount:redis-enterprise:redis-developer \
+  -n redis-enterprise
+# Should return: yes
+
+# Test developer role (cannot modify cluster)
+kubectl auth can-i delete rec \
+  --as=system:serviceaccount:redis-enterprise:redis-developer \
+  -n redis-enterprise
+# Should return: no
+
+# Test readonly role (can view, cannot modify)
+kubectl auth can-i get pods \
+  --as=system:serviceaccount:redis-enterprise:redis-readonly \
+  -n redis-enterprise
+# Should return: yes
+
+kubectl auth can-i delete pods \
+  --as=system:serviceaccount:redis-enterprise:redis-readonly \
+  -n redis-enterprise
+# Should return: no
 ```
 
 ---
 
-## 📦 Implementation
-
-### Redis Enterprise Operator RBAC
-
-The operator needs permissions to manage REC/REDB resources.
-
-See: [01-operator-rbac.yaml](01-operator-rbac.yaml)
-
-```bash
-kubectl apply -f 01-operator-rbac.yaml
-```
-
-### Read-Only Access
-
-For monitoring and observability tools.
-
-See: [02-readonly-rbac.yaml](02-readonly-rbac.yaml)
-
-```bash
-kubectl apply -f 02-readonly-rbac.yaml
-```
-
-### Developer Access
-
-For developers who need to manage databases.
-
-See: [03-developer-rbac.yaml](03-developer-rbac.yaml)
-
-```bash
-kubectl apply -f 03-developer-rbac.yaml
-```
-
-### Admin Access
-
-For administrators who need full access.
-
-See: [04-admin-rbac.yaml](04-admin-rbac.yaml)
-
-```bash
-kubectl apply -f 04-admin-rbac.yaml
-```
-
----
-
-## 🎯 Use Cases
-
-### 1. Redis Enterprise Operator
-
-**Needs:**
-- Create/update/delete REC/REDB
-- Manage pods, services, secrets
-- Access Kubernetes API
-
-**Solution:** [01-operator-rbac.yaml](01-operator-rbac.yaml)
-
-### 2. Monitoring (Prometheus)
-
-**Needs:**
-- Read pods, services
-- Scrape metrics endpoints
-
-**Solution:** [02-readonly-rbac.yaml](02-readonly-rbac.yaml)
-
-### 3. Developers
-
-**Needs:**
-- Create/update/delete REDB
-- View REC status
-- No access to secrets
-
-**Solution:** [03-developer-rbac.yaml](03-developer-rbac.yaml)
-
-### 4. Administrators
-
-**Needs:**
-- Full access to all resources
-- Manage REC and REDB
-- Access secrets
-
-**Solution:** [04-admin-rbac.yaml](04-admin-rbac.yaml)
-
----
-
-## 🔍 Verification
-
-### Check ServiceAccounts
-
-```bash
-# List service accounts
-kubectl get serviceaccount -n redis-enterprise
-
-# Describe service account
-kubectl describe serviceaccount redis-operator -n redis-enterprise
-```
-
-### Check Roles
-
-```bash
-# List roles
-kubectl get role -n redis-enterprise
-
-# List cluster roles
-kubectl get clusterrole | grep redis
-
-# Describe role
-kubectl describe role redis-operator -n redis-enterprise
-```
-
-### Check RoleBindings
-
-```bash
-# List role bindings
-kubectl get rolebinding -n redis-enterprise
-
-# List cluster role bindings
-kubectl get clusterrolebinding | grep redis
-
-# Describe role binding
-kubectl describe rolebinding redis-operator -n redis-enterprise
-```
-
-### Test Permissions
-
-```bash
-# Test as specific service account
-kubectl auth can-i create redb --as=system:serviceaccount:redis-enterprise:redis-developer
-
-# Test all permissions
-kubectl auth can-i --list --as=system:serviceaccount:redis-enterprise:redis-developer
-```
-
----
-
-## ✅ Best Practices
-
-### 1. **Principle of Least Privilege**
-- ✅ Grant minimum required permissions
-- ✅ Use Role instead of ClusterRole when possible
-- ✅ Avoid wildcard permissions (*)
-
-### 2. **Separation of Duties**
-- ✅ Different roles for different teams
-- ✅ Operators vs Developers vs Admins
-- ✅ Read-only for monitoring
-
-### 3. **Use ServiceAccounts**
-- ✅ One ServiceAccount per component
-- ✅ Don't use default ServiceAccount
-- ✅ Bind to specific roles
-
-### 4. **Regular Audits**
-- ✅ Review permissions regularly
-- ✅ Remove unused ServiceAccounts
-- ✅ Check for overly permissive roles
-
-### 5. **Namespace Isolation**
-- ✅ Use Role/RoleBinding for namespace-scoped access
-- ✅ Use ClusterRole/ClusterRoleBinding only when needed
-- ✅ Separate namespaces for different environments
-
----
-
-## 📚 Related Documentation
+## 📚 **Related Documentation**
 
 - [Pod Security Standards](../pod-security/README.md)
 - [Network Policies](../network-policies/README.md)
@@ -227,8 +230,8 @@ kubectl auth can-i --list --as=system:serviceaccount:redis-enterprise:redis-deve
 
 ---
 
-## 🔗 References
+## 🔗 **References**
 
-- Kubernetes RBAC: https://kubernetes.io/docs/reference/access-authn-authz/rbac/
-- Using RBAC Authorization: https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+- [Kubernetes RBAC Documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
+- [Redis Enterprise Operator Installation](https://redis.io/docs/latest/operate/kubernetes/deployment/quick-start/)
 
