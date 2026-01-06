@@ -83,11 +83,13 @@ spec:
     #metricsExporterCertificateSecretName: rec-metrics-cert
   
   # ============================================
-  # Internode Encryption (TLS between nodes)
+  # Cluster Credentials
   # ============================================
-  # Uses the same certificate as CM for internode communication
-  clusterCredentialSecretName: rec-cm-cert
-  #clusterCredentialSecretType: cert
+  # The operator will automatically create a secret with username/password
+  # Secret name will be: rec (same as cluster name)
+  # Do NOT set clusterCredentialSecretName - let operator manage it
+  # clusterCredentialSecretName: rec  # Auto-created by operator
+  # clusterCredentialSecretType: kubernetes  # Default
   
   # ============================================
   # Additional Configuration
