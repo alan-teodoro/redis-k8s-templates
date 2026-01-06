@@ -353,7 +353,125 @@ kubectl port-forward svc/rec-ui -n redis-enterprise 8443:8443
 
 ---
 
-### Step 6: Create Database with TLS (10 minutes)
+### Step 6: Validate Certificates (5 minutes)
+
+**Validar se os certificados estão configurados corretamente:**
+
+#### Opção A: Script Automatizado (Recomendado)
+
+```bash
+# Dar permissão de execução
+chmod +x validate-certificates.sh
+
+# Executar validação completa
+./validate-certificates.sh
+
+# Saída esperada:
+# ✅ Todos os certificados estão READY
+# ✅ API respondendo via HTTPS
+# ✅ SANs corretos
+# ✅ TODOS OS CERTIFICADOS ESTÃO CORRETOS E FUNCIONANDO!
+```
+
+#### Opção B: Validação Manual
+
+**1. Verificar status dos certificados:**
+```bash
+kubectl get certificate -n redis-enterprise
+
+# Saída esperada:
+# NAME           READY   SECRET         AGE
+# rec-api-cert   True    rec-api-cert   25m
+# rec-cm-cert    True    rec-cm-cert    24m
+```
+
+**2. Verificar detalhes do certificado API:**
+```bash
+kubectl describe certificate rec-api-cert -n redis-enterprise
+
+# Verificar:
+# ✅ Status: Ready = True
+# ✅ Message: Certificate is up to date and has not expired
+# ✅ DNS Names: rec.redis-enterprise.svc.cluster.local, rec-ui.*, *.rec.*
+```
+
+**3. Inspecionar certificado X.509:**
+```bash
+# Ver informações do certificado
+kubectl get secret rec-api-cert -n redis-enterprise \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -text
+
+# Verificar:
+# ✅ Subject: CN=rec.redis-enterprise.svc.cluster.local
+# ✅ Validity: Not After (deve estar no futuro)
+# ✅ Subject Alternative Name: DNS names corretos
+```
+
+**4. Verificar validade:**
+```bash
+# Ver datas de validade
+kubectl get secret rec-api-cert -n redis-enterprise \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d | \
+  openssl x509 -noout -dates
+
+# Saída esperada:
+# notBefore=Jan  6 19:37:24 2026 GMT
+# notAfter=Apr  6 19:37:24 2026 GMT  ← Deve ser no futuro!
+```
+
+**5. Testar conexão HTTPS:**
+```bash
+# Testar API HTTPS
+kubectl exec -n redis-enterprise rec-0 -c redis-enterprise-node -- \
+  curl -k -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
+  https://localhost:9443/v1/bootstrap
+
+# Saída esperada:
+# HTTP Status: 401  ← Correto! (sem autenticação)
+```
+
+**6. Verificar configuração no REC:**
+```bash
+# Ver configuração de certificados
+kubectl get rec rec -n redis-enterprise -o jsonpath='{.spec.certificates}' | jq '.'
+
+# Saída esperada:
+# {
+#   "apiCertificateSecretName": "rec-api-cert",
+#   "cmCertificateSecretName": "rec-cm-cert"
+# }
+```
+
+**7. Verificar Subject Alternative Names (SANs):**
+```bash
+# Listar SANs do certificado API
+kubectl get secret rec-api-cert -n redis-enterprise \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d | \
+  openssl x509 -noout -ext subjectAltName
+
+# Saída esperada:
+# X509v3 Subject Alternative Name:
+#     DNS:rec.redis-enterprise.svc.cluster.local
+#     DNS:rec-ui.redis-enterprise.svc.cluster.local
+#     DNS:*.rec.redis-enterprise.svc.cluster.local
+```
+
+**✅ Checklist de Validação:**
+
+- [ ] Certificados com status READY=True
+- [ ] Secrets criados (tipo kubernetes.io/tls)
+- [ ] Validade (notAfter) no futuro
+- [ ] SANs corretos
+- [ ] API respondendo HTTPS (status 401)
+- [ ] Configuração no REC correta
+
+**📄 Documentação Completa:**
+
+Ver arquivo `VERIFICATION-RESULTS.md` para documentação detalhada de validação.
+
+---
+
+### Step 7: Create Database with TLS (10 minutes)
 
 ```bash
 # Create password secret
@@ -384,7 +502,7 @@ kubectl get redb redis-db-tls -n redis-enterprise
 
 ---
 
-### Step 7: Test TLS Connection (5 minutes)
+### Step 8: Test TLS Connection (5 minutes)
 
 ```bash
 # Get database service and port
