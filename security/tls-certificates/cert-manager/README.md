@@ -124,8 +124,8 @@ kubectl get deployment redis-enterprise-operator -n redis-enterprise
 ### Step 1: Install cert-manager (5 minutes)
 
 ```bash
-# Install cert-manager using the template
-kubectl apply -f 01-install-cert-manager.yaml
+# Install cert-manager from official release
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
 
 # Wait for cert-manager to be ready
 kubectl wait --for=condition=ready pod \
@@ -142,6 +142,8 @@ kubectl get pods -n cert-manager
 # cert-manager-cainjector-7d9f4d88d-xxxxx    1/1     Running   0          1m
 # cert-manager-webhook-7d9f4d88d-xxxxx       1/1     Running   0          1m
 ```
+
+**Note:** See [01-install-cert-manager.yaml](01-install-cert-manager.yaml) for alternative installation methods (Helm, custom configuration).
 
 ---
 
@@ -338,11 +340,13 @@ After completing the quick start, you should have:
 
 ### Install cert-manager
 
-See: [01-install-cert-manager.yaml](01-install-cert-manager.yaml)
+See: [01-install-cert-manager.yaml](01-install-cert-manager.yaml) for all installation methods.
+
+**Recommended: Install from official release**
 
 ```bash
 # Install cert-manager CRDs and controller
-kubectl apply -f 01-install-cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.yaml
 
 # Verify installation
 kubectl get pods -n cert-manager
@@ -361,6 +365,10 @@ kubectl get crd | grep cert-manager
 # Check cert-manager version
 kubectl get deployment -n cert-manager cert-manager -o jsonpath='{.spec.template.spec.containers[0].image}'
 ```
+
+**Alternative: Install with Helm**
+
+See [01-install-cert-manager.yaml](01-install-cert-manager.yaml) for Helm installation instructions and custom configuration options.
 
 ---
 
