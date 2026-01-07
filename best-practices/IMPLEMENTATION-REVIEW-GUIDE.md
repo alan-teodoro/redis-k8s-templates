@@ -57,6 +57,13 @@ REDIS ENTERPRISE DEPLOYMENT:
 - Storage class and volume sizes
 - Number of databases and their configurations
 - Current database utilization (QPS, memory usage)
+- Security configuration (TLS, mTLS, RBAC)
+- Ingress/Gateway configuration (if any)
+- Performance monitoring setup (Prometheus/Grafana)
+- Backup and restore configuration
+- Cluster configuration (shards, replication, persistence)
+- Active-active or active-passive configuration (if applicable)
+- LDAP/AD integration (if applicable)
 
 ACCESS (if possible):
 - Read-only kubectl access to the cluster
@@ -440,14 +447,14 @@ aws iam list-attached-role-policies --role-name <role-name>
 
 **Autopilot vs Standard:**
 
-| Feature | Autopilot | Standard | Recommendation |
-|---------|-----------|----------|----------------|
-| **Node Management** | Fully managed by Google | Customer managed | Autopilot = less ops overhead |
-| **Node Pools** | Not configurable | Fully configurable | Standard = more control |
-| **Resource Limits** | Enforced by Google | Customer defined | Autopilot = must fit within limits |
-| **Storage Classes** | Limited (premium-rwo) | Full control (pd-ssd, pd-balanced) | Standard = more options |
-| **Cost** | Pay per pod | Pay per node | Autopilot = potentially cheaper |
-| **nodeSelector/Taints** | Not supported | Supported | Standard = better isolation |
+| Feature                 | Autopilot                  | Standard                           | Recommendation 
+|---------                |-----------                 |----------                          |----------------
+| **Node Management**     | Fully managed by Google    | Customer managed                   | Autopilot = less ops overhead 
+| **Node Pools**          | Not configurable           | Fully configurable                 | Standard = more control 
+| **Resource Limits**     | Enforced by Google         | Customer defined                   | Autopilot = must fit within limits 
+| **Storage Classes**     | Limited (premium-rwo)      | Full control (pd-ssd, pd-balanced) | Standard = more options 
+| **Cost**                | Pay per pod | Pay per node | Autopilot = potentially cheaper.   |
+| **nodeSelector/Taints** | Not supported | Supported  | Standard = better isolation        |
 
 **When to use Autopilot:**
 - ✅ Want minimal operational overhead
