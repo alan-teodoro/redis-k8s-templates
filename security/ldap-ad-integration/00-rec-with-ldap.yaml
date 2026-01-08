@@ -1,11 +1,3 @@
-# Namespace for Redis Enterprise
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: redis-enterprise
-
----
 # Secret for LDAP Bind Credentials
 # This secret stores the bind DN and password for LDAP authentication
 ---
@@ -20,7 +12,6 @@ stringData:
   dn: "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local"
   # Replace with your actual Administrator password
   password: "RedisAdmin123!"
-
 ---
 # Redis Enterprise Cluster with LDAP/AD Integration
 #
@@ -74,16 +65,23 @@ spec:
     # Enable LDAP for Data Plane (Database authentication)
     enabledForDataPlane: true
 
-    # Authentication Query
-    # Template for user DN lookup
+    # Authentication Query (Query mode - same as working VM config)
+    # Search for users in the LDAP directory
     # %u is replaced with the username at runtime
     authenticationQuery:
-      template: "CN=%u,CN=Users,DC=redis,DC=training,DC=local"
+      query:
+        base: "CN=Users,DC=redis,DC=training,DC=local"
+        filter: "(&(objectClass=user)(sAMAccountName=%u))"
+        scope: WholeSubtree
 
-    # Authorization Query
-    # Attribute containing group membership
+    # Authorization Query (Query mode - same as working VM config)
+    # Search for groups the user belongs to
+    # %D is replaced with the user's Distinguished Name
     authorizationQuery:
-      attribute: memberOf
+      query:
+        base: "DC=redis,DC=training,DC=local"
+        filter: "(&(objectClass=group)(member=%D))"
+        scope: WholeSubtree
 
 ---
 # Alternative: REC with LDAPS (SSL/TLS)
@@ -164,11 +162,19 @@ spec:
 #     enabledForControlPlane: true
 #     enabledForDataPlane: true
 
+#     # Authentication Query (Query mode)
 #     authenticationQuery:
-#       template: "CN=%u,CN=Users,DC=redis,DC=training,DC=local"
-
+#       query:
+#         base: "CN=Users,DC=redis,DC=training,DC=local"
+#         filter: "(&(objectClass=user)(sAMAccountName=%u))"
+#         scope: WholeSubtree
+#
+#     # Authorization Query (Query mode)
 #     authorizationQuery:
-#       attribute: memberOf
+#       query:
+#         base: "DC=redis,DC=training,DC=local"
+#         filter: "(&(objectClass=group)(member=%D))"
+#         scope: WholeSubtree
 
     # Optional: Reference to CA certificate secret
     # Uncomment if using custom CA certificate
