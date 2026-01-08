@@ -1,3 +1,10 @@
+# Namespace for Redis Enterprise
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: redis-enterprise
+
 ---
 # Secret for LDAP Bind Credentials
 # This secret stores the bind DN and password for LDAP authentication

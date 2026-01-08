@@ -22,12 +22,18 @@ Complete guide for integrating Redis Enterprise with Samba Active Directory (red
 **TL;DR - Get LDAP working in 5 minutes:**
 
 ```bash
-# 1. Edit password (line 13)
+# 1. Edit password (line 23)
 vi security/ldap-ad-integration/00-rec-with-ldap.yaml
-# Replace: password: "REPLACE_WITH_ADMIN_PASSWORD"
+# Replace: password: "RedisAdmin123!"
+# With your actual Administrator password
 
-# 2. Deploy REC with LDAP
+# 2. Deploy namespace, secret, and REC with LDAP
 kubectl apply -f security/ldap-ad-integration/00-rec-with-ldap.yaml
+
+# Expected output:
+# namespace/redis-enterprise created
+# secret/ldap-bind-credentials created
+# redisenterprisecluster.app.redislabs.com/rec created
 
 # 3. Wait for REC
 kubectl get rec -n redis-enterprise -w
@@ -135,15 +141,21 @@ This guide demonstrates how to integrate Redis Enterprise for Kubernetes with Sa
 
 This directory contains the following files:
 
-| File | Description |
-|------|-------------|
-| **00-rec-with-ldap.yaml** | Redis Enterprise Cluster with LDAP configuration |
-| **01-database-ldap-auth.yaml** | Redis databases with LDAP authentication enabled |
-| **README.md** | This file - complete step-by-step guide |
+| File | Description | Resources Created |
+|------|-------------|-------------------|
+| **00-rec-with-ldap.yaml** | Redis Enterprise Cluster with LDAP configuration | Namespace, Secret, REC |
+| **01-database-ldap-auth.yaml** | Redis databases with LDAP authentication enabled | 2 Databases |
+| **02-ldap-group-mapping-examples.md** | LDAP group mapping guide (UI and API) | Documentation |
+| **README.md** | This file - complete step-by-step guide | Documentation |
+
+**What's in 00-rec-with-ldap.yaml:**
+- **Namespace:** `redis-enterprise` - Kubernetes namespace
+- **Secret:** `ldap-bind-credentials` - LDAP bind DN and password
+- **REC:** `rec` - Redis Enterprise Cluster with LDAP enabled
 
 **Deployment Order:**
-1. `00-rec-with-ldap.yaml` - Deploy REC with LDAP
-2. Map LDAP groups to Redis roles (via UI or API)
+1. `00-rec-with-ldap.yaml` - Deploy namespace, secret, and REC with LDAP
+2. Map LDAP groups to Redis roles (via UI or API - see `02-ldap-group-mapping-examples.md`)
 3. `01-database-ldap-auth.yaml` - Deploy databases with LDAP auth
 
 ---
@@ -196,25 +208,31 @@ Edit the file `00-rec-with-ldap.yaml` and replace the admin password:
 # Open the file
 vi security/ldap-ad-integration/00-rec-with-ldap.yaml
 
-# Find line 13 and replace:
-# password: "REPLACE_WITH_ADMIN_PASSWORD"
+# Find line 23 and replace:
+# password: "RedisAdmin123!"
 # with your actual Administrator password
 ```
 
-### **Step 2: Deploy Redis Enterprise Cluster with LDAP**
+### **Step 2: Deploy Namespace, Secret, and REC with LDAP**
 
-Deploy the REC with LDAP configuration:
+Deploy the namespace, LDAP bind credentials secret, and REC with LDAP configuration:
 
 ```bash
-# Deploy REC with LDAP
+# Deploy namespace, secret, and REC with LDAP
 kubectl apply -f security/ldap-ad-integration/00-rec-with-ldap.yaml
 ```
 
 **Expected output:**
 ```
+namespace/redis-enterprise created
 secret/ldap-bind-credentials created
 redisenterprisecluster.app.redislabs.com/rec created
 ```
+
+**What this creates:**
+- **Namespace:** `redis-enterprise` - Kubernetes namespace for all Redis Enterprise resources
+- **Secret:** `ldap-bind-credentials` - Contains bind DN and password for LDAP authentication
+- **REC:** `rec` - Redis Enterprise Cluster with LDAP configuration
 
 ### **Step 3: Wait for REC to be Ready**
 
