@@ -12,7 +12,7 @@ stringData:
   # Bind DN for Administrator account
   dn: "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local"
   # Replace with your actual Administrator password
-  password: "REPLACE_WITH_ADMIN_PASSWORD"
+  password: "RedisAdmin123!"
 
 ---
 # Redis Enterprise Cluster with LDAP/AD Integration
@@ -32,34 +32,18 @@ spec:
   # Number of REC nodes (odd number for quorum)
   nodes: 3
 
-  # Redis Enterprise version
-  redisEnterpriseImageSpec:
-    imagePullPolicy: IfNotPresent
-    repository: redislabs/redis
-    versionTag: 7.4.2-54  # Use latest stable version
-
   # Resource allocation per REC node
   redisEnterpriseNodeResources:
     limits:
-      cpu: 4000m
-      memory: 16Gi
+      cpu: 1
+      memory: 4Gi
     requests:
-      cpu: 4000m
-      memory: 16Gi
+      cpu: 1
+      memory: 4Gi
 
   # Persistent storage configuration
   persistentSpec:
     enabled: true
-    storageClassName: "standard"  # Change to your storage class (e.g., pd-ssd for GKE)
-    volumeSize: 80Gi  # 5x memory (16Gi * 5 = 80Gi)
-
-  # UI service configuration
-  uiServiceType: ClusterIP
-
-  # Services rigger service type
-  servicesRiggerSpec:
-    databaseServiceType: ClusterIP
-    serviceNaming: bdb_name
 
   # LDAP Configuration for Samba Active Directory
   ldap:
@@ -94,23 +78,19 @@ spec:
     authorizationQuery:
       attribute: memberOf
 
-  # Rack awareness for multi-zone deployment (optional)
-  # Uncomment if deploying across multiple zones
-  # rackAwarenessNodeLabel: topology.kubernetes.io/zone
-
 ---
 # Alternative: REC with LDAPS (SSL/TLS)
 # Use this configuration for production environments
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ldap-bind-credentials-ldaps
-  namespace: redis-enterprise
-type: Opaque
-stringData:
-  dn: "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local"
-  password: "REPLACE_WITH_ADMIN_PASSWORD"
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: ldap-bind-credentials-ldaps
+#   namespace: redis-enterprise
+# type: Opaque
+# stringData:
+#   dn: "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local"
+#   password: "REPLACE_WITH_ADMIN_PASSWORD"
 
 ---
 # Optional: CA Certificate for LDAPS
@@ -130,58 +110,58 @@ stringData:
 #   --from-file=cert=ca-cert.pem
 
 ---
-apiVersion: app.redislabs.com/v1
-kind: RedisEnterpriseCluster
-metadata:
-  name: rec-ldaps
-  namespace: redis-enterprise
-spec:
-  nodes: 3
+# apiVersion: app.redislabs.com/v1
+# kind: RedisEnterpriseCluster
+# metadata:
+#   name: rec-ldaps
+#   namespace: redis-enterprise
+# spec:
+#   nodes: 3
 
-  redisEnterpriseImageSpec:
-    imagePullPolicy: IfNotPresent
-    repository: redislabs/redis
-    versionTag: 7.4.2-54
+#   redisEnterpriseImageSpec:
+#     imagePullPolicy: IfNotPresent
+#     repository: redislabs/redis
+#     versionTag: 7.4.2-54
 
-  redisEnterpriseNodeResources:
-    limits:
-      cpu: 4000m
-      memory: 16Gi
-    requests:
-      cpu: 4000m
-      memory: 16Gi
+#   redisEnterpriseNodeResources:
+#     limits:
+#       cpu: 4000m
+#       memory: 16Gi
+#     requests:
+#       cpu: 4000m
+#       memory: 16Gi
 
-  persistentSpec:
-    enabled: true
-    storageClassName: "standard"
-    volumeSize: 80Gi
+#   persistentSpec:
+#     enabled: true
+#     storageClassName: "standard"
+#     volumeSize: 80Gi
 
-  uiServiceType: ClusterIP
+#   uiServiceType: ClusterIP
 
-  servicesRiggerSpec:
-    databaseServiceType: ClusterIP
-    serviceNaming: bdb_name
+#   servicesRiggerSpec:
+#     databaseServiceType: ClusterIP
+#     serviceNaming: bdb_name
 
-  # LDAPS Configuration (SSL/TLS)
-  ldap:
-    protocol: LDAPS  # LDAPS protocol (port 636)
+#   # LDAPS Configuration (SSL/TLS)
+#   ldap:
+#     protocol: LDAPS  # LDAPS protocol (port 636)
 
-    servers:
-      - host: 3.83.144.166
-        port: 636  # LDAPS port
+#     servers:
+#       - host: 3.83.144.166
+#         port: 636  # LDAPS port
 
-    bindCredentialsSecretName: ldap-bind-credentials-ldaps
+#     bindCredentialsSecretName: ldap-bind-credentials-ldaps
 
-    cacheTTLSeconds: 600
+#     cacheTTLSeconds: 600
 
-    enabledForControlPlane: true
-    enabledForDataPlane: true
+#     enabledForControlPlane: true
+#     enabledForDataPlane: true
 
-    authenticationQuery:
-      template: "CN=%u,CN=Users,DC=redis,DC=training,DC=local"
+#     authenticationQuery:
+#       template: "CN=%u,CN=Users,DC=redis,DC=training,DC=local"
 
-    authorizationQuery:
-      attribute: memberOf
+#     authorizationQuery:
+#       attribute: memberOf
 
     # Optional: Reference to CA certificate secret
     # Uncomment if using custom CA certificate

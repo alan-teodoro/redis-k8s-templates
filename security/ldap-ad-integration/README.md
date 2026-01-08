@@ -4,27 +4,147 @@ Complete guide for integrating Redis Enterprise with Samba Active Directory (red
 
 ## 📋 Table of Contents
 
+- [Quick Start](#quick-start)
 - [Overview](#overview)
+- [Architecture](#architecture)
+- [Files](#files)
 - [Samba AD Server Information](#samba-ad-server-information)
 - [Step-by-Step Configuration](#step-by-step-configuration)
+- [LDAP Group Mapping](#ldap-group-mapping)
 - [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
+- [Summary](#summary)
+
+---
+
+## ⚡ Quick Start
+
+**TL;DR - Get LDAP working in 5 minutes:**
+
+```bash
+# 1. Edit password (line 13)
+vi security/ldap-ad-integration/00-rec-with-ldap.yaml
+# Replace: password: "REPLACE_WITH_ADMIN_PASSWORD"
+
+# 2. Deploy REC with LDAP
+kubectl apply -f security/ldap-ad-integration/00-rec-with-ldap.yaml
+
+# 3. Wait for REC
+kubectl get rec -n redis-enterprise -w
+# Wait for: STATE: Running
+
+# 4. Map LDAP groups (via UI)
+kubectl port-forward svc/rec-ui 8443:8443 -n redis-enterprise
+# Open: https://localhost:8443
+# Go to: Access Control → LDAP Mappings
+# Create 3 mappings:
+#   - Redis-Admins → DB Admin
+#   - Redis-Developers → DB Member
+#   - Redis-Viewers → DB Viewer
+
+# 5. Deploy databases
+kubectl apply -f security/ldap-ad-integration/01-database-ldap-auth.yaml
+
+# 6. Test
+kubectl port-forward svc/redis-db-ldap 12000:12000 -n redis-enterprise
+redis-cli -h localhost -p 12000 --user redis-admin --pass RedisAdmin123! PING
+# Expected: PONG
+```
+
+**Done! ✅** Now read the full guide below for details.
 
 ---
 
 ## 🎯 Overview
 
+This guide demonstrates how to integrate Redis Enterprise for Kubernetes with Samba Active Directory using the declarative `.spec.ldap` field in the RedisEnterpriseCluster custom resource.
+
 **Benefits:**
-- ✅ Centralized user management
+- ✅ Centralized user management via Active Directory
 - ✅ Role-based access control (RBAC)
+- ✅ Single sign-on (SSO) for Cluster Manager UI
+- ✅ LDAP authentication for database access
+- ✅ Group-based access control
 - ✅ Compliance with corporate policies
 - ✅ Audit trail
 
 **What you'll configure:**
-- Samba Active Directory integration
-- LDAP authentication for Redis databases
-- ACL rules mapped to AD users
-- Group-based access control
+- Redis Enterprise Cluster with LDAP integration
+- Samba Active Directory connection (redis.training.local)
+- LDAP authentication for Control Plane (Cluster Manager UI)
+- LDAP authentication for Data Plane (Database access)
+- LDAP group mappings to Redis roles
+- Database ACL rules for LDAP users
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Kubernetes Cluster                        │
+│                                                              │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │  Redis Enterprise Cluster (REC)                    │     │
+│  │                                                     │     │
+│  │  spec.ldap:                                        │     │
+│  │    protocol: LDAP                                  │     │
+│  │    servers:                                        │     │
+│  │      - host: 3.83.144.166                         │     │
+│  │        port: 389                                   │     │
+│  │    enabledForControlPlane: true  ◄─────────┐      │     │
+│  │    enabledForDataPlane: true     ◄─────┐   │      │     │
+│  │                                         │   │      │     │
+│  │  ┌──────────────┐  ┌──────────────┐   │   │      │     │
+│  │  │   rec-0      │  │   rec-1      │   │   │      │     │
+│  │  │              │  │              │   │   │      │     │
+│  │  │  Cluster     │  │  Cluster     │   │   │      │     │
+│  │  │  Manager UI  │  │  Manager UI  │───┘   │      │     │
+│  │  │              │  │              │       │      │     │
+│  │  │  Database    │  │  Database    │───────┘      │     │
+│  │  │  (LDAP Auth) │  │  (LDAP Auth) │              │     │
+│  │  └──────────────┘  └──────────────┘              │     │
+│  └────────────────────────────────────────────────────┘     │
+│                           │                                 │
+│                           │ LDAP Query                      │
+│                           ▼                                 │
+└───────────────────────────┼─────────────────────────────────┘
+                            │
+                            │ ldap://3.83.144.166:389
+                            │
+                            ▼
+              ┌─────────────────────────────┐
+              │  Samba Active Directory     │
+              │  (redis.training.local)     │
+              │                             │
+              │  Users:                     │
+              │  - redis-admin              │
+              │  - redis-dev1, redis-dev2   │
+              │  - redis-viewer1, viewer2   │
+              │                             │
+              │  Groups:                    │
+              │  - Redis-Admins             │
+              │  - Redis-Developers         │
+              │  - Redis-Viewers            │
+              └─────────────────────────────┘
+```
+
+---
+
+## 📁 Files
+
+This directory contains the following files:
+
+| File | Description |
+|------|-------------|
+| **00-rec-with-ldap.yaml** | Redis Enterprise Cluster with LDAP configuration |
+| **01-database-ldap-auth.yaml** | Redis databases with LDAP authentication enabled |
+| **README.md** | This file - complete step-by-step guide |
+
+**Deployment Order:**
+1. `00-rec-with-ldap.yaml` - Deploy REC with LDAP
+2. Map LDAP groups to Redis roles (via UI or API)
+3. `01-database-ldap-auth.yaml` - Deploy databases with LDAP auth
 
 ---
 
@@ -217,7 +337,7 @@ curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST \
 ### **Step 6: Create Database with LDAP Authentication**
 
 ```bash
-kubectl apply -f security/ldap-ad-integration/02-database-ldap-auth.yaml
+kubectl apply -f security/ldap-ad-integration/01-database-ldap-auth.yaml
 ```
 
 **Expected output:**
@@ -238,6 +358,12 @@ NAME                STATUS   AGE
 redis-db-ldap       active   1m
 redis-db-mixed-auth active   1m
 ```
+
+---
+
+## 🔗 LDAP Group Mapping
+
+After the REC is deployed, you need to map LDAP groups to Redis Enterprise roles. This determines what permissions users in each LDAP group will have.
 
 ---
 
@@ -711,7 +837,7 @@ kubectl apply -f 00-rec-with-ldap.yaml
 
 **Files:**
 - **00-rec-with-ldap.yaml:** REC with LDAP configuration
-- **02-database-ldap-auth.yaml:** Databases with LDAP authentication
+- **01-database-ldap-auth.yaml:** Databases with LDAP authentication
 - **README.md:** Complete step-by-step guide
 
 **Next Steps:**
