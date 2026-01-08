@@ -1,0 +1,236 @@
+---
+# Secret for LDAP Bind Credentials
+# This secret stores the bind DN and password for LDAP authentication
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ldap-bind-credentials
+  namespace: redis-enterprise
+type: Opaque
+stringData:
+  # Bind DN for Administrator account
+  dn: "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local"
+  # Replace with your actual Administrator password
+  password: "REPLACE_WITH_ADMIN_PASSWORD"
+
+---
+# Redis Enterprise Cluster with LDAP/AD Integration
+#
+# This REC is configured to integrate with Samba Active Directory
+# Domain: redis.training.local
+# LDAP Server: 3.83.144.166:389
+#
+# LDAP configuration is done directly in the REC spec using the .spec.ldap field
+---
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec
+  namespace: redis-enterprise
+spec:
+  # Number of REC nodes (odd number for quorum)
+  nodes: 3
+
+  # Redis Enterprise version
+  redisEnterpriseImageSpec:
+    imagePullPolicy: IfNotPresent
+    repository: redislabs/redis
+    versionTag: 7.4.2-54  # Use latest stable version
+
+  # Resource allocation per REC node
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: 4000m
+      memory: 16Gi
+    requests:
+      cpu: 4000m
+      memory: 16Gi
+
+  # Persistent storage configuration
+  persistentSpec:
+    enabled: true
+    storageClassName: "standard"  # Change to your storage class (e.g., pd-ssd for GKE)
+    volumeSize: 80Gi  # 5x memory (16Gi * 5 = 80Gi)
+
+  # UI service configuration
+  uiServiceType: ClusterIP
+
+  # Services rigger service type
+  servicesRiggerSpec:
+    databaseServiceType: ClusterIP
+    serviceNaming: bdb_name
+
+  # LDAP Configuration for Samba Active Directory
+  ldap:
+    # Protocol: LDAP (plain), LDAPS (SSL/TLS), or STARTTLS
+    protocol: LDAP  # Use LDAPS for production (port 636)
+
+    # LDAP server configuration
+    servers:
+      - host: 3.83.144.166  # Samba AD server IP
+        port: 389           # LDAP port (use 636 for LDAPS)
+
+    # Reference to secret containing bind credentials
+    bindCredentialsSecretName: ldap-bind-credentials
+
+    # Cache TTL for LDAP queries (in seconds)
+    cacheTTLSeconds: 600  # 10 minutes
+
+    # Enable LDAP for Control Plane (Cluster Manager UI)
+    enabledForControlPlane: true
+
+    # Enable LDAP for Data Plane (Database authentication)
+    enabledForDataPlane: true
+
+    # Authentication Query
+    # Template for user DN lookup
+    # %u is replaced with the username at runtime
+    authenticationQuery:
+      template: "CN=%u,CN=Users,DC=redis,DC=training,DC=local"
+
+    # Authorization Query
+    # Attribute containing group membership
+    authorizationQuery:
+      attribute: memberOf
+
+  # Rack awareness for multi-zone deployment (optional)
+  # Uncomment if deploying across multiple zones
+  # rackAwarenessNodeLabel: topology.kubernetes.io/zone
+
+---
+# Alternative: REC with LDAPS (SSL/TLS)
+# Use this configuration for production environments
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ldap-bind-credentials-ldaps
+  namespace: redis-enterprise
+type: Opaque
+stringData:
+  dn: "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local"
+  password: "REPLACE_WITH_ADMIN_PASSWORD"
+
+---
+# Optional: CA Certificate for LDAPS
+# Create this secret if using custom CA certificate
+---
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: ldap-ca-cert
+#   namespace: redis-enterprise
+# type: Opaque
+# data:
+#   cert: <base64-encoded-ca-cert>
+#
+# To create from file:
+# kubectl -n redis-enterprise create secret generic ldap-ca-cert \
+#   --from-file=cert=ca-cert.pem
+
+---
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec-ldaps
+  namespace: redis-enterprise
+spec:
+  nodes: 3
+
+  redisEnterpriseImageSpec:
+    imagePullPolicy: IfNotPresent
+    repository: redislabs/redis
+    versionTag: 7.4.2-54
+
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: 4000m
+      memory: 16Gi
+    requests:
+      cpu: 4000m
+      memory: 16Gi
+
+  persistentSpec:
+    enabled: true
+    storageClassName: "standard"
+    volumeSize: 80Gi
+
+  uiServiceType: ClusterIP
+
+  servicesRiggerSpec:
+    databaseServiceType: ClusterIP
+    serviceNaming: bdb_name
+
+  # LDAPS Configuration (SSL/TLS)
+  ldap:
+    protocol: LDAPS  # LDAPS protocol (port 636)
+
+    servers:
+      - host: 3.83.144.166
+        port: 636  # LDAPS port
+
+    bindCredentialsSecretName: ldap-bind-credentials-ldaps
+
+    cacheTTLSeconds: 600
+
+    enabledForControlPlane: true
+    enabledForDataPlane: true
+
+    authenticationQuery:
+      template: "CN=%u,CN=Users,DC=redis,DC=training,DC=local"
+
+    authorizationQuery:
+      attribute: memberOf
+
+    # Optional: Reference to CA certificate secret
+    # Uncomment if using custom CA certificate
+    # caCertificateSecretName: ldap-ca-cert
+
+---
+# Deployment Instructions
+---
+
+# OPTION 1: Deploy REC with LDAP (plain, port 389)
+#
+# 1. Edit the secret above (line 13) and replace "REPLACE_WITH_ADMIN_PASSWORD"
+#    with your actual Administrator password
+#
+# 2. Deploy:
+#    kubectl apply -f 00-rec-with-ldap.yaml
+#
+# 3. Wait for REC to be ready:
+#    kubectl get rec -n redis-enterprise -w
+#    Wait for: STATE: Running
+#
+# 4. Verify LDAP configuration:
+#    kubectl exec -it rec-0 -n redis-enterprise -- \
+#      rladmin cluster config | grep ldap
+
+# OPTION 2: Deploy REC with LDAPS (SSL/TLS, port 636) - RECOMMENDED FOR PRODUCTION
+#
+# 1. Edit the secret (line 113) and replace "REPLACE_WITH_ADMIN_PASSWORD"
+#
+# 2. (Optional) Create CA certificate secret if using custom CA:
+#    kubectl -n redis-enterprise create secret generic ldap-ca-cert \
+#      --from-file=cert=ca-cert.pem
+#
+# 3. Deploy:
+#    kubectl apply -f 00-rec-with-ldap.yaml
+#
+# 4. Wait for REC to be ready:
+#    kubectl get rec rec-ldaps -n redis-enterprise -w
+
+# NEXT STEPS:
+#
+# After REC is deployed and running:
+#
+# 1. Map LDAP groups to Redis roles using the Cluster Manager UI or API
+#    See: https://redis.io/docs/latest/operate/rs/security/access-control/ldap/map-ldap-groups/
+#
+# 2. Create databases with LDAP authentication:
+#    kubectl apply -f 02-database-ldap-auth.yaml
+#
+# 3. Test LDAP authentication:
+#    See README.md for complete testing instructions
+

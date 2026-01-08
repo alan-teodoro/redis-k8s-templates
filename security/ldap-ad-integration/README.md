@@ -1,13 +1,12 @@
 # LDAP/Active Directory Integration for Redis Enterprise
 
-Complete guide for integrating Redis Enterprise with LDAP and Active Directory for centralized authentication.
+Complete guide for integrating Redis Enterprise with Samba Active Directory (redis.training.local).
 
 ## 📋 Table of Contents
 
 - [Overview](#overview)
-- [Prerequisites](#prerequisites)
-- [LDAP Configuration](#ldap-configuration)
-- [Active Directory Configuration](#active-directory-configuration)
+- [Samba AD Server Information](#samba-ad-server-information)
+- [Step-by-Step Configuration](#step-by-step-configuration)
 - [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
 
@@ -17,274 +16,716 @@ Complete guide for integrating Redis Enterprise with LDAP and Active Directory f
 
 **Benefits:**
 - ✅ Centralized user management
-- ✅ Single sign-on (SSO)
 - ✅ Role-based access control (RBAC)
 - ✅ Compliance with corporate policies
 - ✅ Audit trail
 
-**Supported:**
-- LDAP (OpenLDAP, etc.)
-- Active Directory (Microsoft AD)
-- LDAPS (LDAP over SSL/TLS)
+**What you'll configure:**
+- Samba Active Directory integration
+- LDAP authentication for Redis databases
+- ACL rules mapped to AD users
+- Group-based access control
 
 ---
 
-## 📋 Prerequisites
+## 🌐 Samba AD Server Information
 
-1. **LDAP/AD Server:**
-   - LDAP server accessible from Kubernetes cluster
-   - LDAP bind credentials
-   - LDAP schema knowledge
+**Domain Configuration:**
+- **Domain:** redis.training.local
+- **Realm:** REDIS.TRAINING.LOCAL
+- **NetBIOS Name:** REDISTRAINING
+- **Base DN:** DC=redis,DC=training,DC=local
 
-2. **Redis Enterprise:**
-   - Redis Enterprise Cluster deployed
-   - Admin access to cluster
+**LDAP Endpoints:**
+- **LDAP URI:** ldap://3.83.144.166:389
+- **LDAPS URI:** ldaps://3.83.144.166:636
+- **Public IP:** 3.83.144.166
 
-3. **Network:**
-   - Network connectivity to LDAP server (port 389 or 636)
-   - DNS resolution for LDAP server
+**Administrator Credentials:**
+- **Username:** Administrator
+- **Bind DN:** CN=Administrator,CN=Users,DC=redis,DC=training,DC=local
 
----
+**Pre-configured Users:**
 
-## 🔧 LDAP Configuration
+| Username | Password | Group | Access Level |
+|----------|----------|-------|--------------|
+| redis-admin | RedisAdmin123! | Redis-Admins | Full admin |
+| redis-dev1 | RedisDev123! | Redis-Developers | Read/Write |
+| redis-dev2 | RedisDev123! | Redis-Developers | Read/Write |
+| redis-viewer1 | RedisView123! | Redis-Viewers | Read-only |
+| redis-viewer2 | RedisView123! | Redis-Viewers | Read-only |
+| redis-readonly | RedisRead123! | Redis-Viewers | Read-only |
 
-### 1. Create LDAP Configuration Secret
+**Security Groups:**
 
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ldap-config
-  namespace: redis-enterprise
-type: Opaque
-stringData:
-  ldap-config.json: |
-    {
-      "name": "ldap-integration",
-      "protocol": "ldap",
-      "server": "ldap.example.com:389",
-      "bind_dn": "cn=admin,dc=example,dc=com",
-      "bind_pass": "admin-password",
-      "search_base": "ou=users,dc=example,dc=com",
-      "search_filter": "(uid=%u)",
-      "user_dn_template": "uid=%u,ou=users,dc=example,dc=com"
-    }
-```
-
-```bash
-kubectl apply -f ldap-config-secret.yaml
-```
-
-### 2. Configure Redis Enterprise Cluster
-
-```bash
-# Copy LDAP config to cluster
-kubectl cp ldap-config.json redis-enterprise/rec-0:/tmp/
-
-# Configure LDAP
-kubectl exec -it rec-0 -n redis-enterprise -- \
-  rladmin cluster config saslauthd_ldap_conf /tmp/ldap-config.json
-
-# Enable SASLAUTHD
-kubectl exec -it rec-0 -n redis-enterprise -- \
-  rladmin cluster config saslauthd enabled
-```
-
-### 3. Create Database with LDAP Authentication
-
-```yaml
-apiVersion: app.redislabs.com/v1alpha1
-kind: RedisEnterpriseDatabase
-metadata:
-  name: redis-db-ldap
-  namespace: redis-enterprise
-spec:
-  memorySize: 2GB
-  
-  # Enable LDAP authentication
-  authentication:
-    saslauthd: true
-  
-  # Optional: ACL for LDAP users
-  aclRules:
-    - user: "ldap-user-1"
-      acl: "allkeys +@all"
-    - user: "ldap-user-2"
-      acl: "~app:* +@read"
-```
+| Group Name | Description | Redis ACL |
+|------------|-------------|-----------|
+| Redis-Admins | Full administrative access | allkeys +@all |
+| Redis-Developers | Read/Write access | allkeys +@all -@dangerous |
+| Redis-Viewers | Read-only access | allkeys +@read |
 
 ---
 
-## 🏢 Active Directory Configuration
+## 🚀 Step-by-Step Configuration
 
-### 1. Create AD Configuration Secret
+### **Step 1: Update LDAP Bind Credentials**
 
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ad-config
-  namespace: redis-enterprise
-type: Opaque
-stringData:
-  ad-config.json: |
-    {
-      "name": "active-directory",
-      "protocol": "ldaps",
-      "server": "ad.corp.example.com:636",
-      "bind_dn": "CN=Redis Service,OU=Service Accounts,DC=corp,DC=example,DC=com",
-      "bind_pass": "service-account-password",
-      "search_base": "OU=Users,DC=corp,DC=example,DC=com",
-      "search_filter": "(&(objectClass=user)(sAMAccountName=%u))",
-      "user_dn_template": "CN=%u,OU=Users,DC=corp,DC=example,DC=com",
-      "tls_cacert_file": "/etc/ssl/certs/ca-bundle.crt"
-    }
-```
-
-### 2. Configure TLS Certificate (for LDAPS)
+Edit the file `00-rec-with-ldap.yaml` and replace the admin password:
 
 ```bash
-# Create CA certificate secret
-kubectl create secret generic ad-ca-cert \
-  --from-file=ca.crt=ad-ca-cert.pem \
-  -n redis-enterprise
+# Open the file
+vi security/ldap-ad-integration/00-rec-with-ldap.yaml
 
-# Mount certificate in REC
-kubectl patch rec rec -n redis-enterprise --type='json' \
-  -p='[{
-    "op": "add",
-    "path": "/spec/volumes",
-    "value": [{
-      "name": "ad-ca-cert",
-      "secret": {"secretName": "ad-ca-cert"}
-    }]
-  }]'
+# Find line 13 and replace:
+# password: "REPLACE_WITH_ADMIN_PASSWORD"
+# with your actual Administrator password
 ```
 
-### 3. Configure Active Directory
+### **Step 2: Deploy Redis Enterprise Cluster with LDAP**
+
+Deploy the REC with LDAP configuration:
 
 ```bash
-# Copy AD config to cluster
-kubectl cp ad-config.json redis-enterprise/rec-0:/tmp/
+# Deploy REC with LDAP
+kubectl apply -f security/ldap-ad-integration/00-rec-with-ldap.yaml
+```
 
-# Configure AD
-kubectl exec -it rec-0 -n redis-enterprise -- \
-  rladmin cluster config saslauthd_ldap_conf /tmp/ad-config.json
+**Expected output:**
+```
+secret/ldap-bind-credentials created
+redisenterprisecluster.app.redislabs.com/rec created
+```
 
-# Enable SASLAUTHD
+### **Step 3: Wait for REC to be Ready**
+
+```bash
+kubectl get rec -n redis-enterprise -w
+```
+
+**Expected output:**
+```
+NAME   NODES   VERSION      STATE     SPEC STATUS   LICENSE STATE   SHARDS LIMIT   LICENSE EXPIRATION DATE   AGE
+rec    3       7.4.2-54     Running   Valid         Valid           4              2025-12-31                 5m
+```
+
+**Verify all pods are running:**
+```bash
+kubectl get pods -n redis-enterprise
+```
+
+**Expected output:**
+```
+NAME                                READY   STATUS    RESTARTS   AGE
+rec-0                               2/2     Running   0          5m
+rec-1                               2/2     Running   0          4m
+rec-2                               2/2     Running   0          3m
+redis-enterprise-operator-xxx       2/2     Running   0          10m
+```
+
+### **Step 4: Verify LDAP Configuration**
+
+```bash
+# Check LDAP configuration
 kubectl exec -it rec-0 -n redis-enterprise -- \
-  rladmin cluster config saslauthd enabled
+  rladmin cluster config | grep ldap
+```
+
+**Expected output:**
+```
+ldap_enabled: true
+ldap_server: 3.83.144.166:389
+```
+
+### **Step 5: Map LDAP Groups to Redis Roles**
+
+**Option A: Using Cluster Manager UI**
+
+1. Get the UI service:
+```bash
+kubectl get svc -n redis-enterprise | grep ui
+```
+
+2. Port-forward to access UI:
+```bash
+kubectl port-forward svc/rec-ui 8443:8443 -n redis-enterprise
+```
+
+3. Open browser: https://localhost:8443
+
+4. Login with admin credentials
+
+5. Navigate to: **Access Control → LDAP Mappings → Create LDAP Mapping**
+
+6. Create mappings:
+
+**Mapping 1: Redis-Admins**
+- **Unique mapping name:** redis-admins-mapping
+- **Distinguished Name:** CN=Redis-Admins,CN=Users,DC=redis,DC=training,DC=local
+- **Role:** DB Admin (or Cluster Admin for full cluster access)
+
+**Mapping 2: Redis-Developers**
+- **Unique mapping name:** redis-developers-mapping
+- **Distinguished Name:** CN=Redis-Developers,CN=Users,DC=redis,DC=training,DC=local
+- **Role:** DB Member
+
+**Mapping 3: Redis-Viewers**
+- **Unique mapping name:** redis-viewers-mapping
+- **Distinguished Name:** CN=Redis-Viewers,CN=Users,DC=redis,DC=training,DC=local
+- **Role:** DB Viewer
+
+**Option B: Using Redis Enterprise API**
+
+```bash
+# Get API endpoint
+API_URL="https://$(kubectl get svc rec -n redis-enterprise -o jsonpath='{.spec.clusterIP}'):9443"
+
+# Get admin credentials
+ADMIN_USER=$(kubectl get secret rec -n redis-enterprise -o jsonpath='{.data.username}' | base64 -d)
+ADMIN_PASS=$(kubectl get secret rec -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d)
+
+# Create LDAP mapping for Redis-Admins
+curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST \
+  "$API_URL/v1/ldap_mappings" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "redis-admins-mapping",
+    "dn": "CN=Redis-Admins,CN=Users,DC=redis,DC=training,DC=local",
+    "role": "DB Admin"
+  }'
+
+# Create LDAP mapping for Redis-Developers
+curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST \
+  "$API_URL/v1/ldap_mappings" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "redis-developers-mapping",
+    "dn": "CN=Redis-Developers,CN=Users,DC=redis,DC=training,DC=local",
+    "role": "DB Member"
+  }'
+
+# Create LDAP mapping for Redis-Viewers
+curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST \
+  "$API_URL/v1/ldap_mappings" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "redis-viewers-mapping",
+    "dn": "CN=Redis-Viewers,CN=Users,DC=redis,DC=training,DC=local",
+    "role": "DB Viewer"
+  }'
+```
+
+### **Step 6: Create Database with LDAP Authentication**
+
+```bash
+kubectl apply -f security/ldap-ad-integration/02-database-ldap-auth.yaml
+```
+
+**Expected output:**
+```
+redisenterprisedatabase.app.redislabs.com/redis-db-ldap created
+redisenterprisedatabase.app.redislabs.com/redis-db-mixed-auth created
+```
+
+### **Step 7: Wait for Database to be Ready**
+
+```bash
+kubectl get redb -n redis-enterprise -w
+```
+
+**Expected output:**
+```
+NAME                STATUS   AGE
+redis-db-ldap       active   1m
+redis-db-mixed-auth active   1m
 ```
 
 ---
 
 ## 🧪 Testing
 
-### Test LDAP Authentication
+### **Test 1: Network Connectivity**
 
 ```bash
-# Test with redis-cli
-redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
-  --user ldap-user-1 \
-  --pass ldap-password \
-  PING
-
-# Expected output: PONG
+# Test connection to LDAP server
+kubectl exec -it rec-0 -n redis-enterprise -- \
+  nc -zv 3.83.144.166 389
 ```
 
-### Test from Application
+**Expected output:**
+```
+Connection to 3.83.144.166 389 port [tcp/ldap] succeeded!
+```
+
+### **Test 2: LDAP Bind**
+
+```bash
+# Test LDAP bind with Administrator
+kubectl exec -it rec-0 -n redis-enterprise -- \
+  ldapsearch -x -H ldap://3.83.144.166:389 \
+  -D "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local" \
+  -w "YOUR_ADMIN_PASSWORD" \
+  -b "DC=redis,DC=training,DC=local" \
+  "(objectClass=user)" cn
+```
+
+**Expected output:**
+```
+# redis-admin, Users, redis.training.local
+dn: CN=redis-admin,CN=Users,DC=redis,DC=training,DC=local
+cn: redis-admin
+...
+result: 0 Success
+```
+
+### **Test 3: Search for Specific User**
+
+```bash
+# Search for redis-admin user
+kubectl exec -it rec-0 -n redis-enterprise -- \
+  ldapsearch -x -H ldap://3.83.144.166:389 \
+  -D "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local" \
+  -w "YOUR_ADMIN_PASSWORD" \
+  -b "DC=redis,DC=training,DC=local" \
+  "(&(objectClass=user)(sAMAccountName=redis-admin))" cn
+```
+
+### **Test 4: Verify Group Membership**
+
+```bash
+# Check if redis-admin is in Redis-Admins group
+kubectl exec -it rec-0 -n redis-enterprise -- \
+  ldapsearch -x -H ldap://3.83.144.166:389 \
+  -D "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local" \
+  -w "YOUR_ADMIN_PASSWORD" \
+  -b "CN=Redis-Admins,CN=Users,DC=redis,DC=training,DC=local" \
+  "(member=CN=redis-admin,CN=Users,DC=redis,DC=training,DC=local)"
+```
+
+### **Test 5: Verify LDAP is Enabled**
+
+```bash
+# Check LDAP configuration
+kubectl exec -it rec-0 -n redis-enterprise -- \
+  rladmin cluster config | grep ldap
+```
+
+**Expected output:**
+```
+ldap_enabled: true
+ldap_server: 3.83.144.166:389
+```
+
+### **Test 6: Get Database Service Endpoint**
+
+```bash
+# Get service details
+kubectl get svc -n redis-enterprise | grep redis-db-ldap
+```
+
+**Expected output:**
+```
+redis-db-ldap   ClusterIP   10.x.x.x   <none>   12000/TCP   5m
+```
+
+### **Test 7: Test with redis-admin (Full Access)**
+
+```bash
+# Port-forward to access from local machine
+kubectl port-forward svc/redis-db-ldap 12000:12000 -n redis-enterprise &
+
+# Test PING
+redis-cli -h localhost -p 12000 \
+  --user redis-admin \
+  --pass RedisAdmin123! \
+  PING
+
+# Test SET
+redis-cli -h localhost -p 12000 \
+  --user redis-admin \
+  --pass RedisAdmin123! \
+  SET test:admin "admin-value"
+
+# Test GET
+redis-cli -h localhost -p 12000 \
+  --user redis-admin \
+  --pass RedisAdmin123! \
+  GET test:admin
+```
+
+**Expected output:**
+```
+PONG
+OK
+"admin-value"
+```
+
+### **Test 8: Test with redis-dev1 (Read/Write, No Dangerous)**
+
+```bash
+# Test SET (should work)
+redis-cli -h localhost -p 12000 \
+  --user redis-dev1 \
+  --pass RedisDev123! \
+  SET test:dev "dev-value"
+
+# Test FLUSHALL (should fail - dangerous command)
+redis-cli -h localhost -p 12000 \
+  --user redis-dev1 \
+  --pass RedisDev123! \
+  FLUSHALL
+```
+
+**Expected output:**
+```
+OK
+(error) NOPERM this user has no permissions to run the 'flushall' command
+```
+
+### **Test 9: Test with redis-viewer1 (Read-Only)**
+
+```bash
+# Test GET (should work)
+redis-cli -h localhost -p 12000 \
+  --user redis-viewer1 \
+  --pass RedisView123! \
+  GET test:admin
+
+# Test SET (should fail - read-only)
+redis-cli -h localhost -p 12000 \
+  --user redis-viewer1 \
+  --pass RedisView123! \
+  SET test:viewer "viewer-value"
+```
+
+**Expected output:**
+```
+"admin-value"
+(error) NOPERM this user has no permissions to run the 'set' command
+```
+
+### **Test 10: Verify User Permissions**
+
+```bash
+# Check who you are
+redis-cli -h localhost -p 12000 \
+  --user redis-admin \
+  --pass RedisAdmin123! \
+  ACL WHOAMI
+
+# List ACL rules
+redis-cli -h localhost -p 12000 \
+  --user redis-admin \
+  --pass RedisAdmin123! \
+  ACL LIST
+```
+
+### **Test 11: Test from Python Application**
 
 ```python
 import redis
 
-# Connect with LDAP credentials
+# Test with redis-dev1
 r = redis.Redis(
-    host='redis-db-ldap.redis-enterprise.svc.cluster.local',
+    host='localhost',
     port=12000,
-    username='ldap-user-1',
-    password='ldap-password',
+    username='redis-dev1',
+    password='RedisDev123!',
     decode_responses=True
 )
 
 # Test connection
 print(r.ping())  # Should print: True
+
+# Test write
+r.set('app:key', 'value')
+print(r.get('app:key'))  # Should print: value
+
+# Test dangerous command (should fail)
+try:
+    r.flushall()
+except redis.exceptions.ResponseError as e:
+    print(f"Expected error: {e}")
 ```
 
-### Verify LDAP Configuration
+### **Test 12: Test Authentication Failure**
 
 ```bash
-# Check SASLAUTHD status
-kubectl exec -it rec-0 -n redis-enterprise -- \
-  rladmin cluster config | grep saslauthd
+# Test with wrong password
+redis-cli -h localhost -p 12000 \
+  --user redis-admin \
+  --pass WrongPassword \
+  PING
+```
 
-# Test LDAP bind
-kubectl exec -it rec-0 -n redis-enterprise -- \
-  testsaslauthd -u ldap-user-1 -p ldap-password
+**Expected output:**
+```
+(error) WRONGPASS invalid username-password pair or user is disabled
 ```
 
 ---
 
 ## 🔍 Troubleshooting
 
-### Issue: Authentication Failed
+### **Issue 1: Authentication Failed**
 
-```bash
-# Check SASLAUTHD logs
-kubectl exec -it rec-0 -n redis-enterprise -- \
-  tail -f /var/opt/redislabs/log/saslauthd.log
-
-# Common issues:
-# 1. Incorrect bind DN or password
-# 2. Wrong search base
-# 3. Network connectivity to LDAP server
-# 4. TLS certificate issues (for LDAPS)
+**Symptoms:**
+```
+(error) WRONGPASS invalid username-password pair or user is disabled
 ```
 
-### Issue: Cannot Connect to LDAP Server
+**Solutions:**
 
+1. **Check LDAP logs:**
 ```bash
-# Test network connectivity
-kubectl exec -it rec-0 -n redis-enterprise -- \
-  nc -zv ldap.example.com 389
-
-# Test DNS resolution
-kubectl exec -it rec-0 -n redis-enterprise -- \
-  nslookup ldap.example.com
-
-# Test LDAP query
-kubectl exec -it rec-0 -n redis-enterprise -- \
-  ldapsearch -x -H ldap://ldap.example.com:389 \
-  -D "cn=admin,dc=example,dc=com" \
-  -w admin-password \
-  -b "ou=users,dc=example,dc=com" \
-  "(uid=test-user)"
+kubectl logs rec-0 -n redis-enterprise -c redis-enterprise-node | grep -i ldap
 ```
 
-### Issue: TLS Certificate Errors
-
+2. **Verify LDAP is enabled:**
 ```bash
-# Verify certificate
 kubectl exec -it rec-0 -n redis-enterprise -- \
-  openssl s_client -connect ad.corp.example.com:636 -showcerts
+  rladmin cluster config | grep ldap
+```
 
-# Check certificate expiry
+**Expected output:**
+```
+ldap_enabled: true
+ldap_server: 3.83.144.166:389
+```
+
+3. **Check LDAP bind credentials secret:**
+```bash
+kubectl get secret ldap-bind-credentials -n redis-enterprise -o yaml
+```
+
+4. **Verify REC LDAP configuration:**
+```bash
+kubectl get rec rec -n redis-enterprise -o yaml | grep -A 20 ldap
+```
+
+### **Issue 2: Cannot Connect to LDAP Server**
+
+**Symptoms:**
+```
+ldap_sasl_bind(SIMPLE): Can't contact LDAP server (-1)
+```
+
+**Solutions:**
+
+1. **Test network connectivity:**
+```bash
 kubectl exec -it rec-0 -n redis-enterprise -- \
-  openssl x509 -in /etc/ssl/certs/ca-bundle.crt -noout -dates
+  nc -zv 3.83.144.166 389
+```
+
+2. **Test DNS resolution:**
+```bash
+kubectl exec -it rec-0 -n redis-enterprise -- \
+  nslookup 3.83.144.166
+```
+
+3. **Check firewall rules:**
+- Ensure port 389 (LDAP) or 636 (LDAPS) is open
+- Check security groups on AWS EC2 instance
+
+4. **Test LDAP query manually:**
+```bash
+kubectl exec -it rec-0 -n redis-enterprise -- \
+  ldapsearch -x -H ldap://3.83.144.166:389 \
+  -D "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local" \
+  -w "YOUR_ADMIN_PASSWORD" \
+  -b "DC=redis,DC=training,DC=local" \
+  "(objectClass=user)"
+```
+
+### **Issue 3: User Not Found**
+
+**Symptoms:**
+```
+testsaslauthd: authentication failed
+```
+
+**Solutions:**
+
+1. **Verify user exists in AD:**
+```bash
+kubectl exec -it rec-0 -n redis-enterprise -- \
+  ldapsearch -x -H ldap://3.83.144.166:389 \
+  -D "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local" \
+  -w "YOUR_ADMIN_PASSWORD" \
+  -b "DC=redis,DC=training,DC=local" \
+  "(&(objectClass=user)(sAMAccountName=redis-admin))"
+```
+
+2. **Check search filter:**
+- Ensure `search_filter` in config is: `(&(objectClass=user)(sAMAccountName=%u))`
+
+3. **Check user DN template:**
+- Ensure `user_dn_template` is: `CN=%u,CN=Users,DC=redis,DC=training,DC=local`
+
+### **Issue 4: Wrong Permissions**
+
+**Symptoms:**
+```
+(error) NOPERM this user has no permissions to run the 'set' command
+```
+
+**Solutions:**
+
+1. **Check ACL rules in database:**
+```bash
+kubectl get redb redis-db-ldap -n redis-enterprise -o yaml | grep -A 20 aclRules
+```
+
+2. **Verify user ACL:**
+```bash
+redis-cli -h localhost -p 12000 \
+  --user redis-admin \
+  --pass RedisAdmin123! \
+  ACL LIST
+```
+
+3. **Update ACL rules:**
+- Edit `02-database-ldap-auth.yaml`
+- Apply changes: `kubectl apply -f 02-database-ldap-auth.yaml`
+
+### **Issue 5: Database Not Ready**
+
+**Symptoms:**
+```
+kubectl get redb -n redis-enterprise
+NAME              STATUS    AGE
+redis-db-ldap     pending   5m
+```
+
+**Solutions:**
+
+1. **Check database events:**
+```bash
+kubectl describe redb redis-db-ldap -n redis-enterprise
+```
+
+2. **Check REC logs:**
+```bash
+kubectl logs rec-0 -n redis-enterprise -c redis-enterprise-node
+```
+
+3. **Check operator logs:**
+```bash
+kubectl logs -n redis-enterprise -l name=redis-enterprise-operator
+```
+
+### **Issue 6: LDAP Not Enabled**
+
+**Symptoms:**
+```
+kubectl exec -it rec-0 -n redis-enterprise -- rladmin cluster config | grep ldap
+ldap_enabled: false
+```
+
+**Solutions:**
+
+1. **Check REC LDAP configuration:**
+```bash
+kubectl get rec rec -n redis-enterprise -o yaml | grep -A 20 ldap
+```
+
+2. **Verify the ldap section exists in REC spec:**
+```yaml
+spec:
+  ldap:
+    protocol: LDAP
+    servers:
+      - host: 3.83.144.166
+        port: 389
+    enabledForControlPlane: true
+    enabledForDataPlane: true
+```
+
+3. **If missing, update the REC:**
+```bash
+kubectl edit rec rec -n redis-enterprise
+# Add the ldap section to spec
+```
+
+### **Issue 7: Bind DN or Password Incorrect**
+
+**Symptoms:**
+```
+ldap_bind: Invalid credentials (49)
+```
+
+**Solutions:**
+
+1. **Verify bind DN:**
+```
+CN=Administrator,CN=Users,DC=redis,DC=training,DC=local
+```
+
+2. **Test bind manually:**
+```bash
+kubectl exec -it rec-0 -n redis-enterprise -- \
+  ldapsearch -x -H ldap://3.83.144.166:389 \
+  -D "CN=Administrator,CN=Users,DC=redis,DC=training,DC=local" \
+  -w "YOUR_ADMIN_PASSWORD" \
+  -b "DC=redis,DC=training,DC=local" \
+  "(objectClass=user)"
+```
+
+3. **Update secret with correct password:**
+```bash
+# Edit the secret
+kubectl edit secret ldap-bind-credentials -n redis-enterprise
+
+# Or delete and recreate
+kubectl delete secret ldap-bind-credentials -n redis-enterprise
+# Edit 00-rec-with-ldap.yaml with correct password (line 13)
+kubectl apply -f 00-rec-with-ldap.yaml
 ```
 
 ---
 
-## 📚 Related Documentation
+## 📚 Summary
 
-- [RBAC](../rbac/README.md)
-- [TLS Certificates](../tls-certificates/README.md)
-- [Security Overview](../README.md)
+**What you configured:**
+1. ✅ Redis Enterprise Cluster with LDAP integration
+2. ✅ Samba Active Directory integration (redis.training.local)
+3. ✅ LDAP authentication for Control Plane (Cluster Manager UI)
+4. ✅ LDAP authentication for Data Plane (Database access)
+5. ✅ LDAP group mappings to Redis roles
+6. ✅ ACL rules for database access
+7. ✅ 6 users with different access levels
+8. ✅ 3 security groups (Admins, Developers, Viewers)
+
+**LDAP Configuration:**
+- **Protocol:** LDAP (port 389) or LDAPS (port 636)
+- **Server:** 3.83.144.166
+- **Base DN:** DC=redis,DC=training,DC=local
+- **Bind DN:** CN=Administrator,CN=Users,DC=redis,DC=training,DC=local
+- **Authentication Template:** CN=%u,CN=Users,DC=redis,DC=training,DC=local
+- **Authorization Attribute:** memberOf
+
+**Users and Access:**
+- **redis-admin:** Full access (allkeys +@all) - Group: Redis-Admins
+- **redis-dev1, redis-dev2:** Read/Write, no dangerous commands - Group: Redis-Developers
+- **redis-viewer1, redis-viewer2, redis-readonly:** Read-only - Group: Redis-Viewers
+
+**Files:**
+- **00-rec-with-ldap.yaml:** REC with LDAP configuration
+- **02-database-ldap-auth.yaml:** Databases with LDAP authentication
+- **README.md:** Complete step-by-step guide
+
+**Next Steps:**
+- Test LDAP authentication with all users
+- Set up monitoring for authentication failures
+- Configure LDAPS (SSL/TLS) for production
+- Test failover scenarios
+- Document LDAP group mappings
 
 ---
 
 ## 🔗 References
 
-- Redis Enterprise LDAP: https://redis.io/docs/latest/operate/rs/security/access-control/ldap/
-- SASLAUTHD: https://www.cyrusimap.org/sasl/sasl/auxprop.html
-- Active Directory: https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/
+- [Redis Enterprise LDAP Documentation](https://redis.io/docs/latest/operate/rs/security/access-control/ldap/)
+- [SASLAUTHD Documentation](https://www.cyrusimap.org/sasl/sasl/auxprop.html)
+- [Samba Active Directory](https://wiki.samba.org/index.php/Setting_up_Samba_as_an_Active_Directory_Domain_Controller)
 

@@ -1,8 +1,11 @@
 ---
-# Redis Enterprise Database with LDAP Authentication
+# Redis Enterprise Database with LDAP Authentication (Samba AD)
 #
 # This database uses LDAP for user authentication.
-# Users must authenticate with their LDAP credentials.
+# Users authenticate with their Samba AD credentials.
+#
+# Domain: redis.training.local
+# Users: redis-admin, redis-dev1, redis-dev2, redis-viewer1, redis-viewer2, redis-readonly
 
 apiVersion: app.redislabs.com/v1alpha1
 kind: RedisEnterpriseDatabase
@@ -11,35 +14,40 @@ metadata:
   namespace: redis-enterprise
 spec:
   memorySize: 2GB
-  
+
   # Enable replication for HA
   replication: true
-  
+
   # Enable LDAP authentication
   authentication:
     saslauthd: true
-  
+
   # Database port
   databasePort: 12000
-  
-  # Optional: ACL rules for LDAP users
-  # Define permissions for specific LDAP users/groups
+
+  # ACL rules for Samba AD users
+  # Map AD users to Redis ACL permissions
   aclRules:
-    # Admin user - full access
-    - user: "admin"
+    # Redis-Admins group - full access
+    - user: "redis-admin"
       acl: "allkeys +@all"
-    
-    # Developer user - read/write access
-    - user: "developer"
+
+    # Redis-Developers group - read/write access (no dangerous commands)
+    - user: "redis-dev1"
       acl: "allkeys +@all -@dangerous"
-    
-    # Read-only user
-    - user: "readonly"
+
+    - user: "redis-dev2"
+      acl: "allkeys +@all -@dangerous"
+
+    # Redis-Viewers group - read-only access
+    - user: "redis-viewer1"
       acl: "allkeys +@read"
-    
-    # Application user - limited to app namespace
-    - user: "app-user"
-      acl: "~app:* +@all -@dangerous"
+
+    - user: "redis-viewer2"
+      acl: "allkeys +@read"
+
+    - user: "redis-readonly"
+      acl: "allkeys +@read"
 
 ---
 # Database with LDAP + Local Users
@@ -70,35 +78,78 @@ spec:
       acl: "allkeys +@all -@dangerous"
 
 ---
-# Testing LDAP Authentication
+# Testing LDAP Authentication with Samba AD Users
 ---
 
-# 1. Connect with LDAP credentials
-# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
-#   --user ldap-username \
-#   --pass ldap-password \
-#   PING
+# STEP 1: Get database service endpoint
+# kubectl get svc -n redis-enterprise | grep redis-db-ldap
 
-# 2. Test from application (Python)
+# STEP 2: Test with redis-admin (Full access)
+# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
+#   --user redis-admin \
+#   --pass RedisAdmin123! \
+#   PING
+# Expected: PONG
+
+# STEP 3: Test write operations with redis-admin
+# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
+#   --user redis-admin \
+#   --pass RedisAdmin123! \
+#   SET test:admin "admin-value"
+# Expected: OK
+
+# STEP 4: Test with redis-dev1 (Read/Write, no dangerous commands)
+# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
+#   --user redis-dev1 \
+#   --pass RedisDev123! \
+#   SET test:dev "dev-value"
+# Expected: OK
+
+# STEP 5: Test dangerous command with redis-dev1 (should fail)
+# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
+#   --user redis-dev1 \
+#   --pass RedisDev123! \
+#   FLUSHALL
+# Expected: (error) NOPERM this user has no permissions to run the 'flushall' command
+
+# STEP 6: Test with redis-viewer1 (Read-only)
+# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
+#   --user redis-viewer1 \
+#   --pass RedisView123! \
+#   GET test:admin
+# Expected: "admin-value"
+
+# STEP 7: Test write with redis-viewer1 (should fail)
+# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
+#   --user redis-viewer1 \
+#   --pass RedisView123! \
+#   SET test:viewer "viewer-value"
+# Expected: (error) NOPERM this user has no permissions to run the 'set' command
+
+# STEP 8: Verify user permissions
+# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
+#   --user redis-admin \
+#   --pass RedisAdmin123! \
+#   ACL WHOAMI
+# Expected: redis-admin
+
+# STEP 9: Test from Python application
 # import redis
 # r = redis.Redis(
 #     host='redis-db-ldap.redis-enterprise.svc.cluster.local',
 #     port=12000,
-#     username='ldap-username',
-#     password='ldap-password'
+#     username='redis-dev1',
+#     password='RedisDev123!',
+#     decode_responses=True
 # )
-# print(r.ping())
+# print(r.ping())  # Should print: True
+# r.set('app:key', 'value')
+# print(r.get('app:key'))  # Should print: value
 
-# 3. Test ACL permissions
+# STEP 10: Test authentication failure
 # redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
-#   --user readonly \
-#   --pass ldap-password \
-#   SET test "value"
-# Expected: (error) NOPERM this user has no permissions to run the 'set' command
-
-# 4. Verify user permissions
-# redis-cli -h redis-db-ldap.redis-enterprise.svc.cluster.local -p 12000 \
-#   --user ldap-username \
-#   --pass ldap-password \
-#   ACL WHOAMI
+#   --user redis-admin \
+#   --pass WrongPassword \
+#   PING
+# Expected: (error) WRONGPASS invalid username-password pair or user is disabled
 
