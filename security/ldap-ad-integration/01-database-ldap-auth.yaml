@@ -6,7 +6,7 @@
 #
 # Domain: redis.training.local
 # Users: redis-admin, redis-dev1, redis-dev2, redis-viewer1, redis-viewer2, redis-readonly
-
+---
 apiVersion: app.redislabs.com/v1alpha1
 kind: RedisEnterpriseDatabase
 metadata:
@@ -48,34 +48,6 @@ spec:
 
     - user: "redis-readonly"
       acl: "allkeys +@read"
-
----
-# Database with LDAP + Local Users
----
-apiVersion: app.redislabs.com/v1alpha1
-kind: RedisEnterpriseDatabase
-metadata:
-  name: redis-db-mixed-auth
-  namespace: redis-enterprise
-spec:
-  memorySize: 2GB
-  replication: true
-  
-  # Enable both LDAP and local authentication
-  authentication:
-    saslauthd: true
-  
-  databasePort: 12001
-  
-  # Local admin user (fallback)
-  databaseSecretName: redis-admin-credentials
-  
-  # ACL rules for LDAP users
-  aclRules:
-    - user: "ldap-admin"
-      acl: "allkeys +@all"
-    - user: "ldap-developer"
-      acl: "allkeys +@all -@dangerous"
 
 ---
 # Testing LDAP Authentication with Samba AD Users
