@@ -144,7 +144,8 @@ This directory contains the following files:
 | File | Description | Resources Created |
 |------|-------------|-------------------|
 | **00-rec-with-ldap.yaml** | Redis Enterprise Cluster with LDAP configuration | Namespace, Secret, REC |
-| **01-database-ldap-auth.yaml** | Redis databases with LDAP authentication enabled | 2 Databases |
+| **01-database-ldap-auth.yaml** | Redis databases with LDAP authentication enabled | Database |
+| **API-ROLES-ACLS.md** | Complete API guide for creating Roles and ACLs | Documentation |
 | **02-ldap-group-mapping-examples.md** | LDAP group mapping guide (UI and API) | Documentation |
 | **README.md** | This file - complete step-by-step guide | Documentation |
 
@@ -155,8 +156,9 @@ This directory contains the following files:
 
 **Deployment Order:**
 1. `00-rec-with-ldap.yaml` - Deploy namespace, secret, and REC with LDAP
-2. Map LDAP groups to Redis roles (via UI or API - see `02-ldap-group-mapping-examples.md`)
-3. `01-database-ldap-auth.yaml` - Deploy databases with LDAP auth
+2. `01-database-ldap-auth.yaml` - Deploy database
+3. Create Roles and ACLs via API (see `API-ROLES-ACLS.md`)
+4. Map LDAP groups to Redis roles (via UI or API - see `02-ldap-group-mapping-examples.md`)
 
 ---
 
@@ -274,97 +276,85 @@ ldap_enabled: true
 ldap_server: 3.83.144.166:389
 ```
 
-### **Step 5: Map LDAP Groups to Redis Roles**
+### **Step 5: Create Roles and ACLs via API**
 
-**Option A: Using Cluster Manager UI**
+**⚠️ IMPORTANT:** LDAP group mappings to Redis Enterprise Roles **CANNOT** be configured via Kubernetes YAML manifests. You **MUST** use the Redis Enterprise REST API or UI to create:
+- ACLs (Access Control Lists)
+- Roles (and map them to LDAP groups)
+- Role-ACL bindings for databases
 
-1. Get the UI service:
+**See complete guide:** [API-ROLES-ACLS.md](API-ROLES-ACLS.md)
+
+**Quick summary:**
+
+1. Port-forward to API:
 ```bash
-kubectl get svc -n redis-enterprise | grep ui
+kubectl port-forward svc/rec 9443:9443 -n redis-enterprise
 ```
 
-2. Port-forward to access UI:
+2. Get admin credentials:
 ```bash
-kubectl port-forward svc/rec-ui 8443:8443 -n redis-enterprise
-```
-
-3. Open browser: https://localhost:8443
-
-4. Login with admin credentials
-
-5. Navigate to: **Access Control → LDAP Mappings → Create LDAP Mapping**
-
-6. Create mappings:
-
-**Mapping 1: Redis-Admins**
-- **Unique mapping name:** redis-admins-mapping
-- **Distinguished Name:** CN=Redis-Admins,CN=Users,DC=redis,DC=training,DC=local
-- **Role:** DB Admin (or Cluster Admin for full cluster access)
-
-**Mapping 2: Redis-Developers**
-- **Unique mapping name:** redis-developers-mapping
-- **Distinguished Name:** CN=Redis-Developers,CN=Users,DC=redis,DC=training,DC=local
-- **Role:** DB Member
-
-**Mapping 3: Redis-Viewers**
-- **Unique mapping name:** redis-viewers-mapping
-- **Distinguished Name:** CN=Redis-Viewers,CN=Users,DC=redis,DC=training,DC=local
-- **Role:** DB Viewer
-
-**Option B: Using Redis Enterprise API**
-
-```bash
-# Get API endpoint
-API_URL="https://$(kubectl get svc rec -n redis-enterprise -o jsonpath='{.spec.clusterIP}'):9443"
-
-# Get admin credentials
 ADMIN_USER=$(kubectl get secret rec -n redis-enterprise -o jsonpath='{.data.username}' | base64 -d)
 ADMIN_PASS=$(kubectl get secret rec -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d)
-
-# Create LDAP mapping for Redis-Admins
-curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST \
-  "$API_URL/v1/ldap_mappings" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "redis-admins-mapping",
-    "dn": "CN=Redis-Admins,CN=Users,DC=redis,DC=training,DC=local",
-    "role": "DB Admin"
-  }'
-
-# Create LDAP mapping for Redis-Developers
-curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST \
-  "$API_URL/v1/ldap_mappings" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "redis-developers-mapping",
-    "dn": "CN=Redis-Developers,CN=Users,DC=redis,DC=training,DC=local",
-    "role": "DB Member"
-  }'
-
-# Create LDAP mapping for Redis-Viewers
-curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST \
-  "$API_URL/v1/ldap_mappings" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "redis-viewers-mapping",
-    "dn": "CN=Redis-Viewers,CN=Users,DC=redis,DC=training,DC=local",
-    "role": "DB Viewer"
-  }'
 ```
 
-### **Step 6: Create Database with LDAP Authentication**
-
+3. Create ACLs:
 ```bash
-kubectl apply -f security/ldap-ad-integration/01-database-ldap-auth.yaml
+# Admin ACL (full access)
+curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST https://localhost:9443/v1/acls \
+  -H "Content-Type: application/json" \
+  -d '{"name": "admin-acl", "acl": "allkeys +@all"}'
+
+# Developer ACL (no dangerous commands)
+curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST https://localhost:9443/v1/acls \
+  -H "Content-Type: application/json" \
+  -d '{"name": "developer-acl", "acl": "allkeys +@all -@dangerous"}'
+
+# Viewer ACL (read-only)
+curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST https://localhost:9443/v1/acls \
+  -H "Content-Type: application/json" \
+  -d '{"name": "viewer-acl", "acl": "allkeys +@read"}'
 ```
 
-**Expected output:**
-```
-redisenterprisedatabase.app.redislabs.com/redis-db-ldap created
-redisenterprisedatabase.app.redislabs.com/redis-db-mixed-auth created
+4. Create Roles and map to LDAP groups:
+```bash
+# Admin Role
+curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST https://localhost:9443/v1/roles \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "redis-admins-role",
+    "management": "admin",
+    "ldap_groups": ["CN=Redis-Admins,CN=Users,DC=redis,DC=training,DC=local"]
+  }'
+
+# Developer Role
+curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST https://localhost:9443/v1/roles \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "redis-developers-role",
+    "management": "db_member",
+    "ldap_groups": ["CN=Redis-Developers,CN=Users,DC=redis,DC=training,DC=local"]
+  }'
+
+# Viewer Role
+curl -k -u "$ADMIN_USER:$ADMIN_PASS" -X POST https://localhost:9443/v1/roles \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "redis-viewers-role",
+    "management": "db_viewer",
+    "ldap_groups": ["CN=Redis-Viewers,CN=Users,DC=redis,DC=training,DC=local"]
+  }'
 ```
 
-### **Step 7: Wait for Database to be Ready**
+5. Bind Roles to ACLs for the database (see API-ROLES-ACLS.md for details)
+
+**Or use the automated script:**
+```bash
+# See API-ROLES-ACLS.md for the complete script
+./configure-ldap-roles.sh
+```
+
+### **Step 6: Wait for Database to be Ready**
 
 ```bash
 kubectl get redb -n redis-enterprise -w
@@ -374,7 +364,6 @@ kubectl get redb -n redis-enterprise -w
 ```
 NAME                STATUS   AGE
 redis-db-ldap       active   1m
-redis-db-mixed-auth active   1m
 ```
 
 ---
@@ -869,7 +858,9 @@ kubectl apply -f 00-rec-with-ldap.yaml
 
 ## 🔗 References
 
-- [Redis Enterprise LDAP Documentation](https://redis.io/docs/latest/operate/rs/security/access-control/ldap/)
+- **[API-ROLES-ACLS.md](API-ROLES-ACLS.md)** - Complete API guide for creating Roles and ACLs
+- [Redis Enterprise LDAP Documentation](https://redis.io/docs/latest/operate/kubernetes/security/ldap/)
+- [Redis Enterprise REST API](https://redis.io/docs/latest/operate/rs/references/rest-api/)
 - [SASLAUTHD Documentation](https://www.cyrusimap.org/sasl/sasl/auxprop.html)
 - [Samba Active Directory](https://wiki.samba.org/index.php/Setting_up_Samba_as_an_Active_Directory_Domain_Controller)
 

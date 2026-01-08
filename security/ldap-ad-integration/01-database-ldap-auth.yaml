@@ -1,19 +1,42 @@
 ---
 # Redis Enterprise Database with LDAP Authentication (Samba AD)
 #
-# IMPORTANT: LDAP authentication is configured at the REC level (00-rec-with-ldap.yaml)
-# This database uses rolesPermissions to map Redis Enterprise Roles to ACLs
+# ============================================================================
+# ⚠️ IMPORTANT: LDAP Roles and ACLs CANNOT be configured via Kubernetes YAML
+# ============================================================================
 #
-# PREREQUISITE: Create Roles and ACLs via Redis Enterprise API or UI first!
+# The RedisEnterpriseDatabase CRD does NOT support:
+#   ❌ Creating ACLs directly in YAML (no aclRules field exists)
+#   ❌ Creating Roles directly in YAML (no roles field exists)
+#   ❌ Mapping LDAP groups to Roles in YAML
 #
-# Steps to configure LDAP authentication for this database:
-# 1. LDAP is already configured in the REC (00-rec-with-ldap.yaml)
-# 2. Create Redis Enterprise Roles via API/UI and map them to LDAP groups
-# 3. Create Redis Enterprise ACLs via API/UI with the desired permissions
-# 4. Use rolesPermissions below to bind Roles to ACLs for this database
+# You MUST use the Redis Enterprise REST API or UI to:
+#   ✅ Create ACLs (Access Control Lists)
+#   ✅ Create Roles and map them to LDAP groups
+#   ✅ Bind Roles to ACLs for this database
 #
-# For now, this database uses the default user authentication (databaseSecretName)
-# To enable LDAP, you must create Roles and ACLs via the Redis Enterprise API or UI
+# See API-ROLES-ACLS.md for complete REST API examples and automation script.
+#
+# ============================================================================
+# Deployment Workflow:
+# ============================================================================
+# 1. Deploy this database (creates with default user authentication)
+# 2. Create ACLs via REST API (see API-ROLES-ACLS.md)
+#    - admin-acl: allkeys +@all
+#    - developer-acl: allkeys +@all -@dangerous
+#    - viewer-acl: allkeys +@read
+# 3. Create Roles via REST API and map to LDAP groups:
+#    - redis-admins-role → CN=Redis-Admins,CN=Users,DC=redis,DC=training,DC=local
+#    - redis-developers-role → CN=Redis-Developers,CN=Users,DC=redis,DC=training,DC=local
+#    - redis-viewers-role → CN=Redis-Viewers,CN=Users,DC=redis,DC=training,DC=local
+# 4. Bind Roles to ACLs for this database via REST API
+# 5. Test LDAP authentication
+#
+# The rolesPermissions field below is COMMENTED OUT because:
+# - It only references existing Roles and ACLs (created via API/UI)
+# - Roles and ACLs must exist before you can reference them
+# - This is a limitation of the Redis Enterprise Kubernetes operator
+# ============================================================================
 ---
 apiVersion: app.redislabs.com/v1alpha1
 kind: RedisEnterpriseDatabase
@@ -68,33 +91,40 @@ spec:
 # Save this password for testing
 
 # ============================================================================
-# CONFIGURE LDAP AUTHENTICATION (via Redis Enterprise UI or API)
+# CONFIGURE LDAP AUTHENTICATION (via Redis Enterprise API)
 # ============================================================================
 
 # LDAP is already configured at the REC level (00-rec-with-ldap.yaml)
-# Now you need to create Roles and ACLs via the Redis Enterprise UI or API
+# Now you need to create Roles and ACLs via the Redis Enterprise API
 
-# Option 1: Via Redis Enterprise UI
-# 1. Port-forward to UI: kubectl port-forward svc/rec-ui 8443:8443 -n redis-enterprise
-# 2. Open browser: https://localhost:8443
-# 3. Login with LDAP user (redis-admin / RedisAdmin123!)
-# 4. Go to: Access Control > Roles
-# 5. Create Roles and map them to LDAP groups:
-#    - Role: redis-admins-role → LDAP Group: CN=Redis-Admins,CN=Users,DC=redis,DC=training,DC=local
-#    - Role: redis-developers-role → LDAP Group: CN=Redis-Developers,CN=Users,DC=redis,DC=training,DC=local
-#    - Role: redis-viewers-role → LDAP Group: CN=Redis-Viewers,CN=Users,DC=redis,DC=training,DC=local
-# 6. Go to: Access Control > ACLs
-# 7. Create ACLs:
-#    - ACL: admin-acl → Rule: allkeys +@all
-#    - ACL: developer-acl → Rule: allkeys +@all -@dangerous
-#    - ACL: viewer-acl → Rule: allkeys +@read
-# 8. Go to: Databases > redis-db-ldap > Configuration > Access Control
-# 9. Add Role-ACL bindings:
-#    - redis-admins-role → admin-acl
-#    - redis-developers-role → developer-acl
-#    - redis-viewers-role → viewer-acl
+# IMPORTANT: See detailed API documentation in API-ROLES-ACLS.md
 
-# Option 2: Via Redis Enterprise API (see API documentation)
+# Quick Start with API:
+# 1. Get admin credentials:
+#    kubectl get secret rec -n redis-enterprise -o jsonpath='{.data.username}' | base64 -d
+#    kubectl get secret rec -n redis-enterprise -o jsonpath='{.data.password}' | base64 -d
+#
+# 2. Port-forward to API:
+#    kubectl port-forward svc/rec 9443:9443 -n redis-enterprise
+#
+# 3. Create ACLs (see API-ROLES-ACLS.md for full examples):
+#    curl -k -u "admin:password" -X POST https://localhost:9443/v1/acls \
+#      -H "Content-Type: application/json" \
+#      -d '{"name": "admin-acl", "acl": "allkeys +@all"}'
+#
+# 4. Create Roles and map to LDAP groups:
+#    curl -k -u "admin:password" -X POST https://localhost:9443/v1/roles \
+#      -H "Content-Type: application/json" \
+#      -d '{
+#        "name": "redis-admins-role",
+#        "management": "admin",
+#        "ldap_groups": ["CN=Redis-Admins,CN=Users,DC=redis,DC=training,DC=local"]
+#      }'
+#
+# 5. Bind Roles to ACLs for the database (see API-ROLES-ACLS.md for details)
+#
+# For complete API examples and automation script, see:
+# → API-ROLES-ACLS.md
 
 # ============================================================================
 # TESTING
