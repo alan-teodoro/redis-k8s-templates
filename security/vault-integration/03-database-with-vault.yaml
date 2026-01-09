@@ -1,0 +1,183 @@
+---
+# Redis Enterprise Database with HashiCorp Vault Integration
+#
+# This manifest creates a Redis Enterprise Database that retrieves its
+# password from HashiCorp Vault instead of Kubernetes secrets.
+#
+# Prerequisites:
+# 1. Redis Enterprise cluster deployed with Vault integration (02-rec-with-vault.yaml)
+# 2. Database credentials stored in Vault (see README Step 8)
+#
+# IMPORTANT: The database password must exist in Vault at:
+#   <VAULT_SECRET_ROOT>/data/<VAULT_SECRET_PREFIX>/<databaseSecretName>
+#
+# Example:
+#   secret/data/redisenterprise-redis-enterprise/my-database
+#
+# Apply:
+#   kubectl apply -f 03-database-with-vault.yaml
+#
+# Verify:
+#   kubectl get redb -n redis-enterprise -w
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: my-database
+  namespace: redis-enterprise
+spec:
+  # ============================================================================
+  # Database Configuration
+  # ============================================================================
+  
+  # Memory size for the database
+  memorySize: 1GB
+  
+  # Enable replication for high availability
+  replication: true
+  
+  # ============================================================================
+  # Vault Integration - Database Password
+  # ============================================================================
+  
+  # Name of the secret in Vault containing the database password
+  # This secret must exist in Vault at:
+  #   <VAULT_SECRET_ROOT>/data/<VAULT_SECRET_PREFIX>/<databaseSecretName>
+  # Example: secret/data/redisenterprise-redis-enterprise/my-database
+  #
+  # The secret must contain a "password" key:
+  #   vault kv put secret/redisenterprise-redis-enterprise/my-database password=MySecurePass123!
+  databaseSecretName: my-database
+  
+  # ============================================================================
+  # Optional Configuration
+  # ============================================================================
+  
+  # Database port (optional)
+  # databasePort: 12000
+  
+  # Eviction policy (optional)
+  # evictionPolicy: volatile-lru
+  
+  # Persistence (optional)
+  # persistence: aofEverySecond
+  
+  # TLS mode (optional)
+  # tlsMode: enabled
+  
+  # Client authentication certificate (optional - stored in Vault)
+  # clientAuthenticationCertificates:
+  #   - my-client-cert
+  
+  # ============================================================================
+  # Backup Configuration (Optional - credentials in Vault)
+  # ============================================================================
+  
+  # Uncomment to enable backups with credentials from Vault
+  
+  # AWS S3 backup
+  # backup:
+  #   interval: 24h
+  #   s3:
+  #     awsSecretName: s3-backup-credentials
+  #     bucketName: my-redis-backups
+  #     subdir: my-database
+  
+  # SFTP backup
+  # backup:
+  #   interval: 24h
+  #   sftp:
+  #     sftpSecretName: sftp-backup-credentials
+  #     sftpUrl: sftp://backup.example.com/redis-backups
+  
+  # Azure Blob backup
+  # backup:
+  #   interval: 24h
+  #   abs:
+  #     absSecretName: azure-backup-credentials
+  #     container: redis-backups
+  #     subdir: my-database
+  
+  # Google Cloud Storage backup
+  # backup:
+  #   interval: 24h
+  #   gcs:
+  #     gcsSecretName: gcs-backup-credentials
+  #     bucketName: my-redis-backups
+  #     subdir: my-database
+  
+  # Swift backup
+  # backup:
+  #   interval: 24h
+  #   swift:
+  #     swiftSecretName: swift-backup-credentials
+  #     container: redis-backups
+  #     prefix: my-database
+
+---
+# Notes:
+# ============================================================================
+#
+# Vault Secret Path:
+# ------------------
+# Database password must be stored in Vault at:
+#   <VAULT_SECRET_ROOT>/data/<VAULT_SECRET_PREFIX>/<databaseSecretName>
+#
+# Example:
+#   secret/data/redisenterprise-redis-enterprise/my-database
+#
+# Secret Format:
+# --------------
+# The secret must contain a "password" key:
+#   vault kv put secret/redisenterprise-redis-enterprise/my-database \
+#     password=MySecurePassword123!
+#
+# Backup Credentials:
+# -------------------
+# If using backups, store credentials in Vault with the appropriate keys:
+#
+# AWS S3:
+#   vault kv put secret/redisenterprise-redis-enterprise/s3-backup-credentials \
+#     AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE \
+#     AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+#
+# SFTP:
+#   vault kv put secret/redisenterprise-redis-enterprise/sftp-backup-credentials \
+#     SFTP_USER=backup-user \
+#     SFTP_PASSWORD=backup-password
+#
+# Azure Blob:
+#   vault kv put secret/redisenterprise-redis-enterprise/azure-backup-credentials \
+#     AZURE_ACCOUNT_NAME=mystorageaccount \
+#     AZURE_ACCOUNT_KEY=base64encodedkey==
+#
+# Google Cloud Storage:
+#   vault kv put secret/redisenterprise-redis-enterprise/gcs-backup-credentials \
+#     GOOGLE_CREDENTIALS='{"type":"service_account",...}'
+#
+# Swift:
+#   vault kv put secret/redisenterprise-redis-enterprise/swift-backup-credentials \
+#     SWIFT_USER=swift-user \
+#     SWIFT_KEY=swift-key \
+#     SWIFT_AUTH_URL=https://auth.example.com/v3
+#
+# Testing:
+# --------
+# After deploying the database, test the connection:
+#
+# 1. Get the database service:
+#    kubectl get svc -n redis-enterprise | grep my-database
+#
+# 2. Port-forward to the database:
+#    kubectl port-forward svc/my-database 12000:12000 -n redis-enterprise
+#
+# 3. Connect with redis-cli (use password from Vault):
+#    redis-cli -h localhost -p 12000 -a <password-from-vault>
+#
+# 4. Test commands:
+#    PING
+#    SET test:key "value"
+#    GET test:key
+#
+# ============================================================================
+

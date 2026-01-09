@@ -1,0 +1,173 @@
+---
+# Redis Enterprise Cluster with HashiCorp Vault Integration
+#
+# This manifest creates a Redis Enterprise Cluster that uses HashiCorp Vault
+# for centralized secret management instead of Kubernetes secrets.
+#
+# Prerequisites:
+# 1. Vault policies and roles created (see README Step 1)
+# 2. Vault CA certificate secret created (see README Step 2)
+# 3. Operator configuration applied (01-operator-config.yaml)
+# 4. Redis Enterprise operator deployed with Vault integration
+# 5. Admission controller secret stored in Vault (see README Step 5)
+# 6. Cluster credentials stored in Vault (see README Step 6)
+#
+# IMPORTANT: Update the following values before applying:
+#   - vault.hashicorp.com/auth-path: Your Kubernetes auth method path
+#   - vault.hashicorp.com/namespace: Your Vault Enterprise namespace (remove for Community)
+#
+# Apply:
+#   kubectl apply -f 02-rec-with-vault.yaml
+#
+# Verify:
+#   kubectl get rec -n redis-enterprise -w
+---
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec
+  namespace: redis-enterprise
+  labels:
+    app: redis-enterprise
+spec:
+  # ============================================================================
+  # Cluster Configuration
+  # ============================================================================
+  
+  # Number of nodes in the cluster
+  nodes: 3
+  
+  # Redis Enterprise version
+  # Use the latest stable version
+  redisEnterpriseImageSpec:
+    imagePullPolicy: IfNotPresent
+  
+  # ============================================================================
+  # Vault Integration - Cluster Credentials
+  # ============================================================================
+  
+  # Name of the secret in Vault containing cluster credentials
+  # This secret must exist in Vault at:
+  #   <VAULT_SECRET_ROOT>/data/<VAULT_SECRET_PREFIX>/<clusterCredentialSecretName>
+  # Example: secret/data/redisenterprise-redis-enterprise/rec
+  clusterCredentialSecretName: rec
+  
+  # Secret type must be set to "vault" for Vault integration
+  clusterCredentialSecretType: vault
+  
+  # Vault role for cluster authentication
+  # This role must be created in Vault and bound to the cluster service account
+  # Created by: 00-vault-policies.sh
+  clusterCredentialSecretRole: redis-enterprise-rec-redis-enterprise
+  
+  # ============================================================================
+  # Vault CA Certificate
+  # ============================================================================
+  
+  # Kubernetes secret containing Vault's CA certificate
+  # This secret must exist in the same namespace as the cluster
+  # Created by: 03-vault-ca-cert.sh
+  vaultCASecret: vault-ca-cert
+  
+  # ============================================================================
+  # Vault Agent Annotations
+  # ============================================================================
+  
+  # Pod annotations for Vault Agent Injector
+  # These annotations configure the Vault agent sidecar for secret injection
+  podAnnotations:
+    # Kubernetes auth method path in Vault
+    # Default: auth/kubernetes
+    # Update if you're using a custom auth path
+    vault.hashicorp.com/auth-path: "auth/kubernetes"
+    
+    # Vault Enterprise namespace (OPTIONAL - Enterprise only)
+    # Remove this annotation for Vault Community Edition
+    # For Vault Enterprise, specify your namespace (e.g., "admin", "prod")
+    # vault.hashicorp.com/namespace: ""
+  
+  # ============================================================================
+  # Resource Limits (Optional)
+  # ============================================================================
+  
+  # Uncomment to set resource limits for Redis Enterprise nodes
+  # redisEnterpriseNodeResources:
+  #   limits:
+  #     cpu: "4000m"
+  #     memory: "8Gi"
+  #   requests:
+  #     cpu: "2000m"
+  #     memory: "4Gi"
+  
+  # ============================================================================
+  # Persistence (Optional)
+  # ============================================================================
+  
+  # Uncomment to configure persistent storage
+  # persistentSpec:
+  #   enabled: true
+  #   storageClassName: "standard"
+  #   volumeSize: "100Gi"
+  
+  # ============================================================================
+  # Additional Vault Secrets (Optional)
+  # ============================================================================
+  
+  # Uncomment to use additional secrets from Vault
+  
+  # Redis Enterprise license
+  # licenseSecretName: redis-enterprise-license
+  
+  # TLS certificates for various components
+  # certificates:
+  #   apiCertificateSecretName: api-tls-cert
+  #   cmCertificateSecretName: cm-tls-cert
+  #   metricsExporterCertificateSecretName: metrics-tls-cert
+  #   proxyCertificateSecretName: proxy-tls-cert
+  #   syncerCertificateSecretName: syncer-tls-cert
+  #   ldapClientCertificateSecretName: ldap-client-tls-cert
+
+---
+# Notes:
+# ============================================================================
+#
+# Vault Secret Path:
+# ------------------
+# Cluster credentials must be stored in Vault at:
+#   <VAULT_SECRET_ROOT>/data/<VAULT_SECRET_PREFIX>/<clusterCredentialSecretName>
+#
+# Example:
+#   secret/data/redisenterprise-redis-enterprise/rec
+#
+# Secret Format:
+# --------------
+# The secret must contain the following keys:
+#   - username: Cluster admin username
+#   - password: Cluster admin password
+#
+# Example:
+#   vault kv put secret/redisenterprise-redis-enterprise/rec \
+#     username=admin@redis.com \
+#     password=MySecurePassword123!
+#
+# Vault Community vs Enterprise:
+# -------------------------------
+# Community Edition:
+#   - Remove vault.hashicorp.com/namespace annotation
+#   - Remove -namespace flags from all vault commands
+#
+# Enterprise Edition:
+#   - Set vault.hashicorp.com/namespace annotation
+#   - Use -namespace flag in all vault commands
+#
+# Troubleshooting:
+# ----------------
+# If cluster pods are not ready:
+#   1. Check cluster credentials exist in Vault
+#   2. Verify Vault CA certificate secret: kubectl get secret vault-ca-cert
+#   3. Check cluster events: kubectl describe rec rec
+#   4. Check pod logs: kubectl logs rec-0 -c redis-enterprise-node
+#   5. Verify Vault connectivity from pod
+#
+# ============================================================================
+

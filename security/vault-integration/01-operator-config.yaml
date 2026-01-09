@@ -1,0 +1,147 @@
+---
+# Redis Enterprise Operator - Vault Configuration (HTTPS)
+#
+# This ConfigMap configures the Redis Enterprise operator to use HashiCorp Vault
+# as the centralized secret management system instead of Kubernetes secrets.
+#
+# ⚠️ REQUISITOS OBRIGATÓRIOS:
+#   1. Vault DEVE usar HTTPS (HTTP não é suportado)
+#   2. Certificado TLS configurado no Vault (auto-assinado é aceito)
+#   3. Secret vault-ca-cert criado no namespace redis-enterprise
+#
+# IMPORTANT: Update the following values before applying:
+#   - VAULT_SERVER_FQDN: Your Vault server IP/hostname
+#   - VAULT_NAMESPACE: Your Vault Enterprise namespace (leave empty for OSS)
+#   - VAULT_AUTH_PATH: Your Kubernetes auth method path (default: kubernetes)
+#
+# Prerequisites:
+# 1. Vault configurado com HTTPS (ver VAULT_HTTPS_SETUP.md)
+# 2. Vault policies and roles created
+# 3. Vault CA certificate secret created:
+#    kubectl create secret generic vault-ca-cert \
+#      --namespace redis-enterprise \
+#      --from-file=vault.ca=./vault-ca.pem
+# 4. Redis Enterprise operator not yet deployed
+#
+# Apply this ConfigMap BEFORE deploying the operator:
+#   kubectl apply -f 01-operator-config.yaml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: operator-environment-config
+  namespace: redis-enterprise
+data:
+  # ============================================================================
+  # Vault Integration - Required Configuration
+  # ============================================================================
+
+  # Enable Vault integration (REQUIRED)
+  # Set to "vault" to use HashiCorp Vault instead of Kubernetes secrets
+  CREDENTIAL_TYPE: "vault"
+
+  # Vault Server Configuration (REQUIRED)
+  # FQDN or IP address of your Vault server
+  # ⚠️ IMPORTANTE: Substitua pelo IP/FQDN do seu Vault
+  # Examples:
+  #   - Vault in Kubernetes: vault.vault-ns.svc.cluster.local
+  #   - External Vault: vault.example.com
+  #   - VM Vault: 192.168.1.100
+  VAULT_SERVER_FQDN: "<VAULT_IP_OR_FQDN>"
+
+  # Vault HTTPS port (REQUIRED)
+  # ⚠️ HTTPS é OBRIGATÓRIO - HTTP não é suportado pelo operator
+  # Default: 8200
+  VAULT_SERVICE_PORT_HTTPS: "8200"
+  
+  # ============================================================================
+  # Vault Secret Engine Configuration
+  # ============================================================================
+  
+  # KV-v2 secret engine mount path (REQUIRED)
+  # Default: secret
+  # This is the path where the KV-v2 secret engine is mounted in Vault
+  VAULT_SECRET_ROOT: "secret"
+  
+  # Secret prefix for Redis Enterprise secrets (REQUIRED)
+  # All Redis Enterprise secrets will be stored under:
+  #   <VAULT_SECRET_ROOT>/data/<VAULT_SECRET_PREFIX>/<secret-name>
+  # Example: secret/data/redisenterprise-redis-enterprise/rec
+  VAULT_SECRET_PREFIX: "redisenterprise-redis-enterprise"
+  
+  # ============================================================================
+  # Vault Authentication Configuration
+  # ============================================================================
+  
+  # Vault role for operator authentication (REQUIRED)
+  # This role must be created in Vault and bound to the operator service account
+  # Created by: 00-vault-policies.sh
+  VAULT_ROLE: "redis-enterprise-operator-redis-enterprise"
+  
+  # Kubernetes auth method path in Vault (REQUIRED)
+  # Default: kubernetes
+  # This is the path where the Kubernetes auth method is enabled in Vault
+  VAULT_AUTH_PATH: "kubernetes"
+  
+  # ============================================================================
+  # Vault Enterprise Configuration (Optional)
+  # ============================================================================
+  
+  # Vault Enterprise namespace (OPTIONAL - Enterprise only)
+  # Leave empty for Vault Community Edition
+  # For Vault Enterprise, specify your namespace (e.g., "admin", "prod")
+  VAULT_NAMESPACE: ""
+  
+  # ============================================================================
+  # Performance and Caching Configuration (Optional)
+  # ============================================================================
+  
+  # Secret cache expiration in seconds (OPTIONAL)
+  # Default: 120 seconds (2 minutes)
+  # How long the operator caches secrets before re-fetching from Vault
+  # Increase for better performance, decrease for faster secret rotation
+  VAULT_CACHE_SECRET_EXPIRATION_SECONDS: "120"
+
+---
+# Notes:
+# ============================================================================
+#
+# Secret Path Structure:
+# ----------------------
+# Secrets are stored in Vault following this pattern:
+#   <VAULT_SECRET_ROOT>/data/<VAULT_SECRET_PREFIX>/<secret-name>
+#
+# Examples:
+#   - Cluster credentials: secret/data/redisenterprise-redis-enterprise/rec
+#   - Database password: secret/data/redisenterprise-redis-enterprise/my-db
+#   - Admission TLS: secret/data/redisenterprise-redis-enterprise/admission-tls
+#
+# Vault Community vs Enterprise:
+# -------------------------------
+# Community Edition:
+#   - Remove VAULT_NAMESPACE or set to empty string
+#   - Remove -namespace flags from all vault commands
+#
+# Enterprise Edition:
+#   - Set VAULT_NAMESPACE to your Vault namespace
+#   - Use -namespace flag in all vault commands
+#
+# Multi-Namespace Deployment:
+# ----------------------------
+# When deploying multiple Redis Enterprise clusters in different K8s namespaces:
+#   1. Create separate ConfigMaps for each namespace
+#   2. Update VAULT_SECRET_PREFIX to include namespace (e.g., redisenterprise-prod)
+#   3. Create separate Vault policies and roles for each namespace
+#   4. Ensure proper isolation between namespaces
+#
+# Troubleshooting:
+# ----------------
+# If operator pod is not ready:
+#   1. Check Vault connectivity: kubectl exec <operator-pod> -- curl -k https://<VAULT_FQDN>:8200/v1/sys/health
+#   2. Verify ConfigMap: kubectl get cm operator-environment-config -o yaml
+#   3. Check operator logs: kubectl logs deployment/redis-enterprise-operator
+#   4. Verify admission-tls secret exists in Vault
+#   5. Verify vault-ca-cert secret exists in Kubernetes
+#
+# ============================================================================
+
