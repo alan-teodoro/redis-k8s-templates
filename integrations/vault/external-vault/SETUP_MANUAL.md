@@ -1,5 +1,12 @@
 # Setup Manual do Vault com HTTPS
 
+> ⚠️ **NOTA:** Este arquivo é apenas para referência.
+>
+> Este projeto foca apenas na **integração Kubernetes ↔ Vault**.
+> Para setup da infraestrutura do Vault (VM/Cloud), use seu projeto dedicado de infra.
+>
+> Este guia assume que você **já tem Vault rodando com HTTPS**.
+
 ## Informações da VM
 
 - **IP:** `<VAULT_IP>`

@@ -1,0 +1,136 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rec
+  namespace: redis-enterprise
+---
+apiVersion: app.redislabs.com/v1
+kind: RedisEnterpriseCluster
+metadata:
+  name: rec
+  namespace: redis-enterprise
+  annotations:
+    # ========================================================================
+    # VAULT AGENT INJECTOR ANNOTATIONS
+    # ========================================================================
+    # Essas annotations são processadas pelo Vault Agent Injector
+    # Elas adicionam automaticamente sidecars e volumes aos pods do REC
+    
+    # Habilita injeção do Vault Agent
+    vault.hashicorp.com/agent-inject: "true"
+    
+    # Role do Kubernetes auth (configurado no Vault)
+    vault.hashicorp.com/role: "redis-enterprise-rec-redis-enterprise"
+    
+    # ========================================================================
+    # INJECTION: admission-tls
+    # ========================================================================
+    # Injeta o secret admission-tls em /vault/secrets/admission-tls.json
+    
+    vault.hashicorp.com/agent-inject-secret-admission-tls.json: "secret/data/redisenterprise-redis-enterprise/admission-tls"
+    
+    # Template para formatar o secret (JSON)
+    vault.hashicorp.com/agent-inject-template-admission-tls.json: |
+      {{- with secret "secret/data/redisenterprise-redis-enterprise/admission-tls" -}}
+      {
+        "cert": {{ .Data.data.cert | toJSON }},
+        "privateKey": {{ .Data.data.privateKey | toJSON }}
+      }
+      {{- end -}}
+    
+    # ========================================================================
+    # INJECTION: rec credentials
+    # ========================================================================
+    # Injeta as credenciais do cluster em /vault/secrets/rec.json
+    
+    vault.hashicorp.com/agent-inject-secret-rec.json: "secret/data/redisenterprise-redis-enterprise/rec"
+    
+    # Template para formatar o secret (JSON)
+    vault.hashicorp.com/agent-inject-template-rec.json: |
+      {{- with secret "secret/data/redisenterprise-redis-enterprise/rec" -}}
+      {
+        "username": {{ .Data.data.username | toJSON }},
+        "password": {{ .Data.data.password | toJSON }}
+      }
+      {{- end -}}
+    
+    # ========================================================================
+    # VAULT AGENT CONFIGURATION
+    # ========================================================================
+    
+    # Namespace do Vault (onde o Vault está rodando)
+    vault.hashicorp.com/namespace: "vault"
+    
+    # Endereço do Vault (DNS interno)
+    vault.hashicorp.com/agent-inject-vault-addr: "https://vault.vault.svc.cluster.local:8200"
+    
+    # Configuração do init container
+    vault.hashicorp.com/agent-init-first: "true"
+    
+    # Recursos do sidecar vault-agent
+    vault.hashicorp.com/agent-limits-cpu: "100m"
+    vault.hashicorp.com/agent-limits-mem: "128Mi"
+    vault.hashicorp.com/agent-requests-cpu: "50m"
+    vault.hashicorp.com/agent-requests-mem: "64Mi"
+    
+    # ========================================================================
+    # OBSERVAÇÕES
+    # ========================================================================
+    # 1. O Vault Agent Injector adiciona automaticamente:
+    #    - Init container: vault-agent-init
+    #    - Sidecar: vault-agent
+    #    - Volume: /vault/secrets
+    #
+    # 2. Secrets injetados:
+    #    - /vault/secrets/admission-tls.json
+    #    - /vault/secrets/rec.json
+    #
+    # 3. O Vault Agent:
+    #    - Autentica usando Kubernetes auth
+    #    - Busca os secrets no Vault
+    #    - Renderiza os templates
+    #    - Renova o token automaticamente
+    #
+    # 4. O Operator lê os secrets de /vault/secrets/
+spec:
+  # Service Account (necessário para Kubernetes auth)
+  serviceAccountName: rec
+  
+  # Número de nodes no cluster
+  nodes: 3
+  
+  # Recursos por node
+  redisEnterpriseNodeResources:
+    limits:
+      cpu: "2000m"
+      memory: 4Gi
+    requests:
+      cpu: "1000m"
+      memory: 2Gi
+  
+  # Persistência
+  persistentSpec:
+    enabled: true
+    storageClassName: "standard"  # Ajustar conforme seu cluster
+    volumeSize: 10Gi
+  
+  # UI
+  uiServiceType: ClusterIP
+  
+  # Licença (opcional)
+  # licenseSecretName: redis-enterprise-license
+  
+  # ========================================================================
+  # VAULT INTEGRATION
+  # ========================================================================
+  # O Operator busca credenciais em /vault/secrets/rec.json
+  # Formato esperado:
+  # {
+  #   "username": "demo@redislabs.com",
+  #   "password": "MySecurePassword123!"
+  # }
+  
+  # Não é necessário especificar credentialsSecretName
+  # O Operator detecta automaticamente os secrets injetados pelo Vault
+

@@ -1,0 +1,194 @@
+# ============================================================================
+# Vault Helm Chart Values - In-Cluster HA Configuration
+# ============================================================================
+# Este arquivo contém a configuração para deploy do Vault no Kubernetes
+# com High Availability usando Raft storage
+#
+# Uso:
+#   helm install vault hashicorp/vault \
+#     --namespace vault \
+#     --create-namespace \
+#     --values 01-vault-helm-values.yaml
+#
+# ============================================================================
+
+global:
+  # Habilita TLS para comunicação interna
+  tlsDisable: false
+
+# ============================================================================
+# VAULT AGENT INJECTOR
+# ============================================================================
+# Componente que injeta secrets do Vault nos pods via annotations
+injector:
+  # Habilita o injector
+  enabled: true
+  
+  # Número de réplicas
+  replicas: 2
+  
+  # Recursos
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  
+  # Configuração de rede
+  port: 8080
+  
+  # Metrics
+  metrics:
+    enabled: true
+  
+  # Configuração do webhook
+  failurePolicy: Ignore
+  
+  # Namespace onde o injector pode atuar (vazio = todos)
+  namespaceSelector: {}
+
+# ============================================================================
+# VAULT SERVER
+# ============================================================================
+server:
+  # ========================================================================
+  # HIGH AVAILABILITY
+  # ========================================================================
+  ha:
+    # Habilita HA
+    enabled: true
+    
+    # Número de réplicas (mínimo 3 para quorum)
+    replicas: 3
+    
+    # ======================================================================
+    # RAFT STORAGE
+    # ======================================================================
+    # Raft é o backend de storage recomendado para Vault HA no Kubernetes
+    # Não requer dependências externas (Consul, etcd, etc)
+    raft:
+      # Habilita Raft
+      enabled: true
+      
+      # Configuração do Raft
+      config: |
+        ui = true
+        
+        listener "tcp" {
+          tls_disable = 0
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
+          tls_key_file  = "/vault/userconfig/vault-server-tls/tls.key"
+        }
+        
+        storage "raft" {
+          path = "/vault/data"
+          
+          retry_join {
+            leader_api_addr = "https://vault-0.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+          }
+          
+          retry_join {
+            leader_api_addr = "https://vault-1.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+          }
+          
+          retry_join {
+            leader_api_addr = "https://vault-2.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+          }
+        }
+        
+        service_registration "kubernetes" {}
+  
+  # ========================================================================
+  # RESOURCES
+  # ========================================================================
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 500m
+    limits:
+      memory: 2Gi
+      cpu: 1000m
+  
+  # ========================================================================
+  # PERSISTENCE
+  # ========================================================================
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: null  # Usa o default do cluster
+    accessMode: ReadWriteOnce
+  
+  # ========================================================================
+  # AUDIT STORAGE
+  # ========================================================================
+  auditStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: null
+    accessMode: ReadWriteOnce
+  
+  # ========================================================================
+  # SERVICE
+  # ========================================================================
+  service:
+    enabled: true
+    type: ClusterIP
+    port: 8200
+    targetPort: 8200
+  
+  # ========================================================================
+  # INGRESS (opcional)
+  # ========================================================================
+  ingress:
+    enabled: false
+    # Descomente para habilitar
+    # hosts:
+    #   - host: vault.example.com
+    #     paths:
+    #       - /
+    # tls:
+    #   - secretName: vault-tls
+    #     hosts:
+    #       - vault.example.com
+
+# ============================================================================
+# UI
+# ============================================================================
+ui:
+  # Habilita UI web
+  enabled: true
+  
+  # Service type para UI
+  serviceType: "ClusterIP"
+  
+  # Para acessar externamente, use port-forward:
+  # kubectl port-forward -n vault svc/vault-ui 8200:8200
+
+# ============================================================================
+# OBSERVAÇÕES
+# ============================================================================
+# 1. Após o deploy, os pods ficarão 0/1 (Sealed)
+#    Execute o script 02-vault-init.sh para inicializar
+#
+# 2. O Vault usa TLS auto-gerado
+#    Para produção, configure certificados próprios
+#
+# 3. Raft storage persiste dados em PVCs
+#    Configure backups com Velero
+#
+# 4. Para acessar a UI:
+#    kubectl port-forward -n vault svc/vault 8200:8200
+#    Abra: https://localhost:8200
+#
+# 5. Para auto-unseal em produção, configure:
+#    - AWS KMS
+#    - GCP Cloud KMS
+#    - Azure Key Vault
+

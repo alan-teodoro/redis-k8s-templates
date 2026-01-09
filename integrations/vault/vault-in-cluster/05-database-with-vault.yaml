@@ -1,0 +1,129 @@
+---
+apiVersion: app.redislabs.com/v1alpha1
+kind: RedisEnterpriseDatabase
+metadata:
+  name: my-database
+  namespace: redis-enterprise
+  annotations:
+    # ========================================================================
+    # VAULT AGENT INJECTOR ANNOTATIONS
+    # ========================================================================
+    # Essas annotations são processadas pelo Vault Agent Injector
+    # Elas adicionam automaticamente sidecars e volumes aos pods da aplicação
+    
+    # Habilita injeção do Vault Agent
+    vault.hashicorp.com/agent-inject: "true"
+    
+    # Role do Kubernetes auth
+    vault.hashicorp.com/role: "redis-enterprise-rec-redis-enterprise"
+    
+    # ========================================================================
+    # INJECTION: database credentials
+    # ========================================================================
+    # Injeta as credenciais do database em /vault/secrets/database.json
+    
+    vault.hashicorp.com/agent-inject-secret-database.json: "secret/data/redisenterprise-redis-enterprise/database/my-database"
+    
+    # Template para formatar o secret (JSON)
+    vault.hashicorp.com/agent-inject-template-database.json: |
+      {{- with secret "secret/data/redisenterprise-redis-enterprise/database/my-database" -}}
+      {
+        "password": {{ .Data.data.password | toJSON }},
+        "port": {{ .Data.data.port | toJSON }},
+        "service_name": {{ .Data.data.service_name | toJSON }}
+      }
+      {{- end -}}
+    
+    # ========================================================================
+    # VAULT AGENT CONFIGURATION
+    # ========================================================================
+    
+    # Namespace do Vault
+    vault.hashicorp.com/namespace: "vault"
+    
+    # Endereço do Vault (DNS interno)
+    vault.hashicorp.com/agent-inject-vault-addr: "https://vault.vault.svc.cluster.local:8200"
+    
+    # ========================================================================
+    # OBSERVAÇÕES
+    # ========================================================================
+    # 1. O Operator armazena automaticamente as credenciais do database no Vault
+    # 2. Path: secret/data/redisenterprise-redis-enterprise/database/<database-name>
+    # 3. Dados armazenados:
+    #    - password: Senha do database
+    #    - port: Porta do database
+    #    - service_name: Nome do service Kubernetes
+spec:
+  # Referência ao cluster
+  redisEnterpriseCluster:
+    name: rec
+  
+  # Tipo de database
+  memorySize: 100MB
+  
+  # Replicação
+  replication: true
+  
+  # Persistência
+  persistence: aofEverySecond
+  
+  # Eviction policy
+  evictionPolicy: volatile-lru
+  
+  # ========================================================================
+  # VAULT INTEGRATION
+  # ========================================================================
+  # O Operator armazena automaticamente as credenciais no Vault após criar o database
+  # Path: secret/data/redisenterprise-redis-enterprise/database/my-database
+  #
+  # Formato:
+  # {
+  #   "password": "auto-generated-password",
+  #   "port": "12345",
+  #   "service_name": "my-database"
+  # }
+  #
+  # Para acessar de uma aplicação:
+  # 1. Adicione as annotations do Vault Agent Injector no Deployment da app
+  # 2. Monte /vault/secrets/database.json
+  # 3. Leia as credenciais do arquivo JSON
+  
+  # ========================================================================
+  # EXEMPLO: Deployment de aplicação com Vault
+  # ========================================================================
+  # apiVersion: apps/v1
+  # kind: Deployment
+  # metadata:
+  #   name: my-app
+  #   annotations:
+  #     vault.hashicorp.com/agent-inject: "true"
+  #     vault.hashicorp.com/role: "redis-enterprise-rec-redis-enterprise"
+  #     vault.hashicorp.com/agent-inject-secret-database.json: "secret/data/redisenterprise-redis-enterprise/database/my-database"
+  #     vault.hashicorp.com/agent-inject-template-database.json: |
+  #       {{- with secret "secret/data/redisenterprise-redis-enterprise/database/my-database" -}}
+  #       {
+  #         "password": {{ .Data.data.password | toJSON }},
+  #         "port": {{ .Data.data.port | toJSON }},
+  #         "service_name": {{ .Data.data.service_name | toJSON }}
+  #       }
+  #       {{- end -}}
+  # spec:
+  #   template:
+  #     spec:
+  #       containers:
+  #       - name: app
+  #         image: my-app:latest
+  #         env:
+  #         - name: REDIS_PASSWORD
+  #           valueFrom:
+  #             secretKeyRef:
+  #               name: vault-secret
+  #               key: password
+  #         volumeMounts:
+  #         - name: vault-secrets
+  #           mountPath: /vault/secrets
+  #           readOnly: true
+  #       volumes:
+  #       - name: vault-secrets
+  #         emptyDir: {}
+
