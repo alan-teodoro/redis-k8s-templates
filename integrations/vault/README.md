@@ -1,80 +1,82 @@
 # HashiCorp Vault Integration with Redis Enterprise
 
-Este diretório contém implementações de referência para integrar Redis Enterprise com HashiCorp Vault para gerenciamento centralizado de secrets.
+This directory contains reference implementations for integrating Redis Enterprise with HashiCorp Vault for centralized secrets management.
 
-## 📁 Estrutura
+## 📁 Structure
 
 ```
 vault/
-├── external-vault/       # Vault externo (VM, Cloud, etc)
-│   └── ...              # Apenas configuração K8s para integração
-└── vault-in-cluster/    # Vault rodando dentro do Kubernetes
-    └── ...              # Infra do Vault + Integração Redis
+├── external-vault/       # External Vault (VM, Cloud, etc.)
+│   └── ...              # K8s configuration for integration only
+└── vault-in-cluster/    # Vault running inside Kubernetes
+    └── ...              # Vault infrastructure + Redis integration
 ```
 
-## 🎯 Qual Opção Escolher?
+## 🎯 Which Option to Choose?
 
-### 🌐 **Vault Externo** (`external-vault/`)
+### 🌐 **External Vault** (`external-vault/`)
 
-**Use quando:**
-- ✅ Já tem Vault rodando em VM/Cloud
-- ✅ Vault gerencia múltiplos clusters Kubernetes
-- ✅ Requisitos de compliance exigem separação física
-- ✅ Equipe de segurança gerencia Vault separadamente
+**Use when:**
+- ✅ You already have Vault running on VM/Cloud
+- ✅ Vault manages multiple Kubernetes clusters
+- ✅ Compliance requirements demand physical separation
+- ✅ Security team manages Vault separately
 
-**O que contém:**
-- Configuração do Redis Enterprise Operator para Vault externo
-- Manifests do REC e Database com integração Vault
-- Troubleshooting de problemas comuns
-- Guia de configuração passo a passo
+**What's included:**
+- Redis Enterprise Operator configuration for external Vault
+- REC and Database manifests with Vault integration
+- Troubleshooting for common issues
+- Step-by-step configuration guide
 
-**Pré-requisitos:**
-- Vault já instalado e configurado com HTTPS
-- Conectividade de rede entre K8s e Vault
-- Security Groups/Firewall configurados
+**Prerequisites:**
+- Vault already installed and configured with HTTPS
+- Network connectivity between K8s and Vault
+- Security Groups/Firewall configured
 
-**📖 [Ir para documentação →](./external-vault/)**
+**📖 [Go to documentation →](./external-vault/)**
 
 ---
 
 ### ☸️ **Vault in Cluster** (`vault-in-cluster/`)
 
-**Use quando:**
-- ✅ Vault é usado apenas para este cluster
-- ✅ Quer simplicidade e automação
-- ✅ Precisa de HA sem complexidade adicional
-- ✅ Quer reduzir custos (sem VMs dedicadas)
+**Use when:**
+- ✅ Vault is used only for this cluster
+- ✅ You want simplicity and automation
+- ✅ You need HA without additional complexity
+- ✅ You want to reduce costs (no dedicated VMs)
 
-**O que contém:**
-- Deploy completo do Vault no Kubernetes (Helm)
-- Configuração de HA com Raft storage
-- Integração automática com Redis Enterprise
-- Tudo via manifests Kubernetes
+**What's included:**
+- Complete Vault deployment in Kubernetes (Helm)
+- HA configuration with Raft storage
+- Automatic integration with Redis Enterprise
+- Everything via Kubernetes manifests
 
-**Vantagens:**
-- Setup muito mais simples (tudo via kubectl/helm)
-- HA nativo via StatefulSet
-- Latência mínima (rede interna do cluster)
-- Sem necessidade de Security Groups externos
+**Advantages:**
+- Much simpler setup (everything via kubectl/helm)
+- Native HA via StatefulSet
+- Minimal latency (internal cluster network)
+- No need for external Security Groups
 
-**📖 [Ir para documentação →](./vault-in-cluster/)**
+**📖 [Go to documentation →](./vault-in-cluster/)**
 
 ---
 
-## 📊 Comparação Rápida
+## 📊 Quick Comparison
 
-| Aspecto | Vault Externo | Vault in Cluster |
+| Aspect | External Vault | Vault in Cluster |
 |---------|---------------|------------------|
-| **Complexidade Setup** | 🔴 Alta | 🟢 Baixa |
-| **Custo** | 🔴 VMs dedicadas | 🟢 Usa nodes existentes |
-| **HA** | 🔴 Manual | 🟢 Automático |
-| **Latência** | 🔴 Rede externa | 🟢 Rede interna |
-| **Isolamento** | 🟢 Total | 🟡 Compartilhado |
-| **Manutenção** | 🔴 Manual | 🟢 Automatizada |
+| **Setup Complexity** | 🔴 High | 🟢 Low |
+| **Cost** | 🔴 Dedicated VMs | 🟢 Uses existing nodes |
+| **HA** | 🔴 Manual | 🟢 Automatic |
+| **Latency** | 🔴 External network | 🟢 Internal network |
+| **Isolation** | 🟢 Complete | 🟡 Shared |
+| **Maintenance** | 🔴 Manual | 🟢 Automated |
+| **Multi-cluster** | 🟢 Yes | 🔴 Single cluster only |
+| **Compliance** | 🟢 Physical separation | 🟡 Logical separation |
 
 ## 🚀 Quick Start
 
-### Vault Externo
+### External Vault
 ```bash
 cd external-vault/
 cat README.md
@@ -86,21 +88,21 @@ cd vault-in-cluster/
 cat README.md
 ```
 
-## ⚠️ Requisitos Importantes
+## ⚠️ Important Requirements
 
-**Ambas as opções requerem:**
-- ✅ Vault com HTTPS (HTTP não é suportado)
-- ✅ KV v2 secret engine habilitado
-- ✅ Kubernetes auth method configurado
-- ✅ Policies e roles criados no Vault
+**Both options require:**
+- ✅ Vault with HTTPS (HTTP is not supported)
+- ✅ KV v2 secrets engine enabled
+- ✅ Kubernetes auth method configured
+- ✅ Policies and roles created in Vault
 
-## 📚 Recursos Adicionais
+## 📚 Additional Resources
 
 - [Redis Enterprise Vault Integration](https://redis.io/blog/kubernetes-secret/)
 - [Vault Kubernetes Auth](https://developer.hashicorp.com/vault/docs/auth/kubernetes)
 - [Vault on Kubernetes Deployment Guide](https://developer.hashicorp.com/vault/tutorials/kubernetes/kubernetes-raft-deployment-guide)
 
-## 🤝 Contribuindo
+## 🤝 Contributing
 
-Este é um projeto de referência. Adapte às suas necessidades específicas.
+This is a reference project. Adapt to your specific needs.
 

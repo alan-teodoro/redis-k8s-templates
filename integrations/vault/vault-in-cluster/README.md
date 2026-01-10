@@ -1,46 +1,45 @@
 # Vault in Cluster - Redis Enterprise Integration
 
-Deploy completo do HashiCorp Vault dentro do Kubernetes e integração com Redis Enterprise.
+Complete deployment of HashiCorp Vault inside Kubernetes and integration with Redis Enterprise.
 
-## 📋 Visão Geral
+## 📋 Overview
 
-Esta implementação instala o Vault diretamente no cluster Kubernetes usando Helm, configurando:
-- Vault com HA (3 réplicas) usando Raft storage
-- Vault Agent Injector para injeção automática de secrets
-- Integração completa com Redis Enterprise Operator
-- Tudo via DNS interno do Kubernetes (sem IPs externos)
+This implementation installs Vault directly in the Kubernetes cluster using Helm, configuring:
+- Vault with HA (3 replicas) using Raft storage
+- Vault Agent Injector for automatic secret injection
+- Complete integration with Redis Enterprise Operator
+- Everything via Kubernetes internal DNS (no external IPs)
 
-## 🎯 Vantagens
+## 🎯 Advantages
 
-- ✅ **Setup simples**: Tudo via `kubectl` e `helm`
-- ✅ **HA nativo**: StatefulSet com 3 réplicas
-- ✅ **Latência mínima**: Rede interna do cluster
-- ✅ **Sem Security Groups**: Não precisa configurar firewall
-- ✅ **Custo reduzido**: Usa nodes existentes do cluster
-- ✅ **Manutenção automatizada**: Kubernetes gerencia tudo
+- ✅ **Simple setup**: Everything via `kubectl` and `helm`
+- ✅ **Native HA**: StatefulSet with 3 replicas
+- ✅ **Minimal latency**: Internal cluster network
+- ✅ **No Security Groups**: No firewall configuration needed
+- ✅ **Reduced cost**: Uses existing cluster nodes
+- ✅ **Automated maintenance**: Kubernetes manages everything
 
-## 📁 Arquivos
+## 📁 Files
 
 ```
 vault-in-cluster/
-├── README.md                          # Este arquivo
-├── 01-vault-deployment.yaml           # Deploy do Vault (Helm values)
-├── 02-vault-init.sh                   # Script de inicialização
-├── 03-operator-config.yaml            # ConfigMap do Operator
-├── 04-rec-with-vault.yaml             # REC com Vault
-└── 05-database-with-vault.yaml        # Database com Vault
+├── README.md                          # This file
+├── 01-vault-helm-values.yaml          # Vault Helm values
+├── 03-operator-config.yaml            # Operator ConfigMap
+├── 04-rec-with-vault.yaml             # REC with Vault
+└── 05-database-with-vault.yaml        # Database with Vault
 ```
 
-## 🚀 Passo a Passo
+## 🚀 Step-by-Step Deployment
 
-### Passo 1: Deploy do Vault
+### Step 1: Deploy Vault
 
 ```bash
-# Adicionar repo do Vault
+# Add Vault Helm repository
 helm repo add hashicorp https://helm.releases.hashicorp.com
 helm repo update
 
-# Instalar Vault com HA
+# Install Vault with HA
 helm install vault hashicorp/vault \
   --namespace vault \
   --create-namespace \
@@ -50,24 +49,50 @@ helm install vault hashicorp/vault \
   --set "injector.enabled=true" \
   --set "ui.enabled=true"
 
-# Verificar pods
+# Verify pods
 kubectl get pods -n vault
-# Esperado: vault-0, vault-1, vault-2 (0/1 Running - sealed)
+# Expected: vault-0, vault-1, vault-2 (0/1 Running - sealed)
 #           vault-agent-injector-xxx (1/1 Running)
 ```
 
-### Passo 2: Inicializar e Unseal o Vault
+**Expected output:**
+```
+NAME                                    READY   STATUS    RESTARTS   AGE
+vault-0                                 0/1     Running   0          30s
+vault-1                                 0/1     Running   0          30s
+vault-2                                 0/1     Running   0          30s
+vault-agent-injector-5d8c9b9f4b-xxxxx   1/1     Running   0          30s
+```
+
+### Step 2: Initialize and Unseal Vault
 
 ```bash
-# Inicializar Vault (apenas no vault-0)
+# Initialize Vault (only on vault-0)
 kubectl exec -n vault vault-0 -- vault operator init \
   -key-shares=5 \
   -key-threshold=3 \
   -format=json > vault-keys.json
 
-# ⚠️ IMPORTANTE: Salvar vault-keys.json em local seguro!
+# ⚠️ IMPORTANT: Save vault-keys.json in a secure location!
+```
 
-# Extrair keys
+**Expected output:**
+```json
+{
+  "unseal_keys_b64": ["key1...", "key2...", "key3...", "key4...", "key5..."],
+  "unseal_keys_hex": ["...", "...", "...", "...", "..."],
+  "unseal_shares": 5,
+  "unseal_threshold": 3,
+  "recovery_keys_b64": [],
+  "recovery_keys_hex": [],
+  "recovery_keys_shares": 0,
+  "recovery_keys_threshold": 0,
+  "root_token": "hvs.xxxxxxxxxxxxx"
+}
+```
+
+```bash
+# Extract keys
 UNSEAL_KEY_1=$(cat vault-keys.json | jq -r '.unseal_keys_b64[0]')
 UNSEAL_KEY_2=$(cat vault-keys.json | jq -r '.unseal_keys_b64[1]')
 UNSEAL_KEY_3=$(cat vault-keys.json | jq -r '.unseal_keys_b64[2]')
@@ -77,38 +102,80 @@ ROOT_TOKEN=$(cat vault-keys.json | jq -r '.root_token')
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY_1
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY_2
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY_3
+```
 
-# Unseal vault-1 e vault-2
+**Expected output after each unseal command:**
+```
+Key                     Value
+---                     -----
+Seal Type               shamir
+Initialized             true
+Sealed                  true    # false after 3rd unseal
+Unseal Progress         1/3     # 2/3, then 3/3
+...
+```
+
+```bash
+# Unseal vault-1
 kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY_1
 kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY_2
 kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY_3
 
+# Unseal vault-2
 kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY_1
 kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY_2
 kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY_3
 
-# Verificar status
+# Verify status
 kubectl get pods -n vault
-# Esperado: vault-0, vault-1, vault-2 (1/1 Running)
+# Expected: vault-0, vault-1, vault-2 (1/1 Running)
 ```
 
-### Passo 3: Configurar Kubernetes Auth
+### Step 3: Configure Kubernetes Authentication
 
 ```bash
-# Login no Vault
+# Login to Vault
 kubectl exec -n vault vault-0 -- vault login $ROOT_TOKEN
+```
 
-# Habilitar KV v2
+**Expected output:**
+```
+Success! You are now authenticated.
+```
+
+```bash
+# Enable KV v2 secrets engine
 kubectl exec -n vault vault-0 -- vault secrets enable -version=2 -path=secret kv
+```
 
-# Habilitar Kubernetes auth
+**Expected output:**
+```
+Success! Enabled the kv secrets engine at: secret/
+```
+
+```bash
+# Enable Kubernetes authentication
 kubectl exec -n vault vault-0 -- vault auth enable kubernetes
+```
 
-# Configurar Kubernetes auth (usa DNS interno!)
+**Expected output:**
+```
+Success! Enabled kubernetes auth method at: kubernetes/
+```
+
+```bash
+# Configure Kubernetes auth (uses internal DNS!)
 kubectl exec -n vault vault-0 -- vault write auth/kubernetes/config \
   kubernetes_host="https://kubernetes.default.svc:443"
+```
 
-# Criar policy para Redis Enterprise
+**Expected output:**
+```
+Success! Data written to: auth/kubernetes/config
+```
+
+```bash
+# Create policy for Redis Enterprise
 kubectl exec -n vault vault-0 -- vault policy write redisenterprise-redis-enterprise - <<EOF
 path "secret/data/redisenterprise-redis-enterprise/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
@@ -117,8 +184,15 @@ path "secret/metadata/redisenterprise-redis-enterprise/*" {
   capabilities = ["list"]
 }
 EOF
+```
 
-# Criar roles
+**Expected output:**
+```
+Success! Uploaded policy: redisenterprise-redis-enterprise
+```
+
+```bash
+# Create roles for operator and REC
 kubectl exec -n vault vault-0 -- vault write auth/kubernetes/role/redis-enterprise-operator-redis-enterprise \
   bound_service_account_names=redis-enterprise-operator \
   bound_service_account_namespaces=redis-enterprise \
@@ -132,164 +206,310 @@ kubectl exec -n vault vault-0 -- vault write auth/kubernetes/role/redis-enterpri
   ttl=1h
 ```
 
-### Passo 4: Deploy Redis Enterprise Operator
+**Expected output:**
+```
+Success! Data written to: auth/kubernetes/role/redis-enterprise-operator-redis-enterprise
+Success! Data written to: auth/kubernetes/role/redis-enterprise-rec-redis-enterprise
+```
+
+### Step 4: Deploy Redis Enterprise Operator
 
 ```bash
-# Criar namespace
+# Create namespace
 kubectl create namespace redis-enterprise
 
-# Aplicar ConfigMap do Operator
+# Apply Operator ConfigMap
 kubectl apply -f 03-operator-config.yaml
 
-# Instalar Operator
+# Install Operator
 kubectl apply -f https://raw.githubusercontent.com/RedisLabs/redis-enterprise-k8s-docs/master/redis-enterprise-cluster_rhel_crd.yaml
 kubectl apply -f https://raw.githubusercontent.com/RedisLabs/redis-enterprise-k8s-docs/master/bundle.yaml
 
-# Aguardar operator (vai ficar 1/2 até próximo passo)
+# Wait for operator (will be 1/2 until next step)
 kubectl get pods -n redis-enterprise -w
 ```
 
-### Passo 5: Gerar e Armazenar admission-tls
+**Expected output:**
+```
+NAME                                        READY   STATUS    RESTARTS   AGE
+redis-enterprise-operator-xxxxxxxxx-xxxxx   1/2     Running   0          30s
+```
+
+### Step 5: Generate and Store admission-tls Certificate
 
 ```bash
-# Aguardar operator subir
+# Wait for operator to start
 sleep 30
 
-# Gerar certificado
+# Get operator pod name
 OPERATOR_POD=$(kubectl get pod -l name=redis-enterprise-operator -n redis-enterprise -o jsonpath='{.items[0].metadata.name}')
 
+# Generate admission-tls certificate
 kubectl exec -n redis-enterprise $OPERATOR_POD -c redis-enterprise-operator -- \
   /usr/local/bin/generate-tls -infer 2>/dev/null | tail -4 > admission-tls.json
+```
 
-# Armazenar no Vault
+**Expected output in admission-tls.json:**
+```json
+{
+  "cert": "LS0tLS1CRUdJTi...",
+  "privateKey": "LS0tLS1CRUdJTi..."
+}
+```
+
+```bash
+# Extract certificate and key
 CERT=$(cat admission-tls.json | jq -r .cert)
 PRIVATE_KEY=$(cat admission-tls.json | jq -r .privateKey)
 
+# Store in Vault
 kubectl exec -n vault vault-0 -- vault login $ROOT_TOKEN
 kubectl exec -n vault vault-0 -- vault kv put secret/redisenterprise-redis-enterprise/admission-tls \
   cert="$CERT" \
   privateKey="$PRIVATE_KEY"
+```
 
-# Reiniciar operator
+**Expected output:**
+```
+====== Secret Path ======
+secret/data/redisenterprise-redis-enterprise/admission-tls
+
+======= Metadata =======
+Key                Value
+---                -----
+created_time       2026-01-10T...
+custom_metadata    <nil>
+deletion_time      n/a
+destroyed          false
+version            1
+```
+
+```bash
+# Restart operator to pick up the secret
 kubectl rollout restart deployment/redis-enterprise-operator -n redis-enterprise
 
-# Verificar (deve ficar 2/2)
+# Verify operator is now 2/2
 kubectl get pods -n redis-enterprise -w
 ```
 
-### Passo 6: Criar Credenciais do Cluster
+**Expected output:**
+```
+NAME                                        READY   STATUS    RESTARTS   AGE
+redis-enterprise-operator-xxxxxxxxx-xxxxx   2/2     Running   0          1m
+```
+
+### Step 6: Create Cluster Credentials
 
 ```bash
-# Armazenar credenciais do cluster no Vault
+# Store cluster credentials in Vault
 kubectl exec -n vault vault-0 -- vault login $ROOT_TOKEN
 kubectl exec -n vault vault-0 -- vault kv put secret/redisenterprise-redis-enterprise/rec \
   username=demo@redislabs.com \
   password='MySecurePassword123!'
+```
 
-# Verificar
+**Expected output:**
+```
+====== Secret Path ======
+secret/data/redisenterprise-redis-enterprise/rec
+
+======= Metadata =======
+Key                Value
+---                -----
+created_time       2026-01-10T...
+version            1
+```
+
+```bash
+# Verify secret was stored
 kubectl exec -n vault vault-0 -- vault kv get secret/redisenterprise-redis-enterprise/rec
 ```
 
-### Passo 7: Deploy REC e Database
+**Expected output:**
+```
+====== Data ======
+Key         Value
+---         -----
+password    MySecurePassword123!
+username    demo@redislabs.com
+```
+
+### Step 7: Deploy REC and Database
 
 ```bash
-# Deploy REC
+# Deploy Redis Enterprise Cluster
 kubectl apply -f 04-rec-with-vault.yaml
 
-# Aguardar REC ficar pronto
+# Wait for REC to be ready
 kubectl get rec -n redis-enterprise -w
-# Esperado: rec   Running
+```
 
+**Expected output:**
+```
+NAME   NODES   VERSION      STATE     SPEC STATUS   LICENSE STATE   SHARDS LIMIT   LICENSE EXPIRATION DATE   AGE
+rec    3       7.4.2-54     Running   Valid         Valid           4              2025-12-31                 2m
+```
+
+```bash
 # Deploy Database
 kubectl apply -f 05-database-with-vault.yaml
 
-# Verificar
+# Verify database
 kubectl get redb -n redis-enterprise
-# Esperado: my-database   active
 ```
 
-## 🔍 Verificação
+**Expected output:**
+```
+NAME          STATUS   SPEC STATUS   AGE
+my-database   active   Valid         30s
+```
+
+## 🔍 Verification
+
+### 1. Verify Vault Pods
 
 ```bash
-# 1. Verificar Vault pods
 kubectl get pods -n vault
-# Esperado: Todos 1/1 Running
-
-# 2. Verificar Operator
-kubectl get pods -n redis-enterprise
-# Esperado: redis-enterprise-operator-xxx 2/2 Running
-
-# 3. Verificar logs do admission
-kubectl logs -n redis-enterprise deployment/redis-enterprise-operator -c admission --tail=20
-# Esperado: "new Vault token was created", "TLS key successfully retrieved"
-
-# 4. Verificar secrets injetados no REC
-kubectl exec -n redis-enterprise rec-0 -c redis-enterprise-node -- \
-  cat /vault/secrets/rec.json
-# Esperado: {"password": "...", "username": "..."}
-
-# 5. Verificar secrets no Vault
-kubectl exec -n vault vault-0 -- vault kv list secret/redisenterprise-redis-enterprise/
-# Esperado: admission-tls, rec
 ```
 
-## 🔧 Diferenças vs Vault Externo
+**Expected output:**
+```
+NAME                                    READY   STATUS    RESTARTS   AGE
+vault-0                                 1/1     Running   0          10m
+vault-1                                 1/1     Running   0          10m
+vault-2                                 1/1     Running   0          10m
+vault-agent-injector-5d8c9b9f4b-xxxxx   1/1     Running   0          10m
+```
 
-| Aspecto | Vault Externo | Vault in Cluster |
+### 2. Verify Operator
+
+```bash
+kubectl get pods -n redis-enterprise
+```
+
+**Expected output:**
+```
+NAME                                        READY   STATUS    RESTARTS   AGE
+redis-enterprise-operator-xxxxxxxxx-xxxxx   2/2     Running   0          5m
+```
+
+### 3. Verify Admission Container Logs
+
+```bash
+kubectl logs -n redis-enterprise deployment/redis-enterprise-operator -c admission --tail=20
+```
+
+**Expected output should contain:**
+```
+new Vault token was created
+TLS key successfully retrieved from Vault
+```
+
+### 4. Verify Secrets Injected in REC Pods
+
+```bash
+kubectl exec -n redis-enterprise rec-0 -c redis-enterprise-node -- \
+  cat /vault/secrets/rec.json
+```
+
+**Expected output:**
+```json
+{"password": "MySecurePassword123!", "username": "demo@redislabs.com"}
+```
+
+### 5. Verify Secrets in Vault
+
+```bash
+kubectl exec -n vault vault-0 -- vault kv list secret/redisenterprise-redis-enterprise/
+```
+
+**Expected output:**
+```
+Keys
+----
+admission-tls
+rec
+```
+
+## 🔧 Differences vs External Vault
+
+| Aspect | External Vault | Vault in Cluster |
 |---------|---------------|------------------|
-| **VAULT_SERVER_FQDN** | IP público | `vault.vault.svc.cluster.local` |
-| **Vault Agent Injector** | Precisa configurar `externalVaultAddr` | Automático |
-| **CA Certificate** | Precisa copiar manualmente | Gerenciado pelo K8s |
-| **Kubernetes Auth** | Precisa configurar `kubernetes_host` com URL externa | Usa `https://kubernetes.default.svc:443` |
-| **Security Groups** | Necessário | Não necessário |
-| **Latência** | Rede externa | Rede interna |
+| **VAULT_SERVER_FQDN** | Public IP or DNS | `vault.vault.svc.cluster.local` |
+| **Vault Agent Injector** | Need to configure `externalVaultAddr` | Automatic |
+| **CA Certificate** | Need to copy manually | Managed by K8s |
+| **Kubernetes Auth** | Need to configure `kubernetes_host` with external URL | Uses `https://kubernetes.default.svc:443` |
+| **Security Groups** | Required | Not required |
+| **Latency** | External network | Internal network |
+| **Setup Complexity** | Higher (network config) | Lower (all in K8s) |
 
 ## ⚠️ Troubleshooting
 
-### Vault pods ficam 0/1 (Sealed)
-**Causa:** Vault não foi unsealed após restart
+### Vault Pods Stay 0/1 (Sealed)
 
-**Solução:**
+**Cause:** Vault was not unsealed after restart
+
+**Solution:**
 ```bash
-# Unseal cada pod
+# Unseal each pod with 3 keys
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY_1
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY_2
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY_3
-# Repetir para vault-1 e vault-2
+
+# Repeat for vault-1 and vault-2
+kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY_1
+kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY_2
+kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY_3
+
+kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY_1
+kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY_2
+kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY_3
 ```
 
-### Operator fica 1/2
-**Causa:** Secret `admission-tls` não existe no Vault
+### Operator Stays 1/2
 
-**Solução:** Executar Passo 5 novamente
+**Cause:** Secret `admission-tls` does not exist in Vault
 
-### REC pods ficam em Init
-**Causa:** Vault Agent não consegue autenticar
+**Solution:** Re-run Step 5 to generate and store admission-tls certificate
 
-**Verificar:**
+### REC Pods Stuck in Init
+
+**Cause:** Vault Agent cannot authenticate
+
+**Check logs:**
 ```bash
 kubectl logs -n redis-enterprise rec-0 -c vault-agent-init
-# Procurar por "authentication successful"
 ```
 
-## 📚 Recursos Adicionais
+**Look for:** `authentication successful`
+
+**If authentication fails, verify:**
+1. Kubernetes auth is enabled in Vault
+2. Role `redis-enterprise-rec-redis-enterprise` exists
+3. ServiceAccount `rec` exists in namespace `redis-enterprise`
+
+## 📚 Additional Resources
 
 - [Vault on Kubernetes Deployment Guide](https://developer.hashicorp.com/vault/tutorials/kubernetes/kubernetes-raft-deployment-guide)
 - [Vault HA with Raft](https://developer.hashicorp.com/vault/docs/configuration/storage/raft)
 - [Redis Enterprise Vault Integration](https://redis.io/blog/kubernetes-secret/)
 
-## 🔒 Segurança
+## 🔒 Security Best Practices
 
-**⚠️ IMPORTANTE:**
-- Salve `vault-keys.json` em local seguro (ex: 1Password, AWS Secrets Manager)
-- Nunca commite `vault-keys.json` no Git
-- Em produção, considere usar auto-unseal com AWS KMS/GCP KMS
-- Rotacione o root token após configuração inicial
+**⚠️ IMPORTANT:**
+- Save `vault-keys.json` in a secure location (e.g., 1Password, AWS Secrets Manager)
+- **NEVER** commit `vault-keys.json` to Git
+- In production, consider using auto-unseal with AWS KMS/GCP KMS/Azure Key Vault
+- Rotate the root token after initial configuration
+- Enable audit logging in Vault
+- Use separate Vault namespaces for different environments
 
-## 🎯 Próximos Passos
+## 🎯 Next Steps
 
-- Configure backup automático com Velero
-- Implemente auto-unseal com Cloud KMS
-- Configure audit logs do Vault
-- Implemente rotação automática de secrets
+- Configure automatic backup with Velero
+- Implement auto-unseal with Cloud KMS
+- Configure Vault audit logs
+- Implement automatic secret rotation
+- Set up monitoring and alerting for Vault
+- Configure Vault snapshots for disaster recovery
 

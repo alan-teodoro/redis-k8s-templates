@@ -83,9 +83,7 @@ Choose your platform and follow the setup guide:
 | Platform | Guide | Description |
 |----------|-------|-------------|
 | **AWS EKS** | [platforms/eks/](platforms/eks/) | Complete EKS cluster setup with Redis Enterprise |
-| **Azure AKS** | [platforms/aks/](platforms/aks/) | AKS cluster setup (coming soon) |
-| **Google GKE** | [platforms/gke/](platforms/gke/) | GKE cluster setup (coming soon) |
-| **OpenShift** | [platforms/openshift/](platforms/openshift/) | OpenShift deployment examples |
+| **OpenShift** | [platforms/openshift/](platforms/openshift/) | OpenShift deployment examples (gold standard) |
 
 ### 2. Deployment Pattern
 

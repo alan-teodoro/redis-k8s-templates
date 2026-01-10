@@ -1,33 +1,33 @@
-# HashiCorp Vault Integration com Redis Enterprise
+# HashiCorp Vault Integration with Redis Enterprise
 
-Integração do Redis Enterprise Operator com HashiCorp Vault para gerenciamento centralizado de secrets.
+Integration of Redis Enterprise Operator with HashiCorp Vault for centralized secrets management.
 
-## ⚠️ REQUISITOS CRÍTICOS
+## ⚠️ CRITICAL REQUIREMENTS
 
-**O Redis Enterprise Operator REQUER HTTPS para integração com Vault.**
+**Redis Enterprise Operator REQUIRES HTTPS for Vault integration.**
 
-- ❌ HTTP não é suportado
-- ✅ HTTPS é obrigatório (porta 8200)
-- ✅ Certificado auto-assinado é aceito
-- ✅ KV v2 secret engine obrigatório
-- ✅ **Vault VM DEVE ter acesso de rede ao Kubernetes API** (porta 443)
-- ✅ **Kubernetes DEVE ter acesso de rede ao Vault** (porta 8200)
+- ❌ HTTP is not supported
+- ✅ HTTPS is mandatory (port 8200)
+- ✅ Self-signed certificate is accepted
+- ✅ KV v2 secrets engine is mandatory
+- ✅ **Vault VM MUST have network access to Kubernetes API** (port 443)
+- ✅ **Kubernetes MUST have network access to Vault** (port 8200)
 
-## 📁 Arquivos
+## 📁 Files
 
-- **`01-operator-config.yaml`** - ConfigMap do operator com variáveis Vault
-- **`02-rec-with-vault.yaml`** - Redis Enterprise Cluster usando Vault
-- **`03-database-with-vault.yaml`** - Redis Database usando Vault
+- **`01-operator-config.yaml`** - Operator ConfigMap with Vault variables
+- **`02-rec-with-vault.yaml`** - Redis Enterprise Cluster using Vault
+- **`03-database-with-vault.yaml`** - Redis Database using Vault
 
-## 📋 Pré-requisitos de Rede (AWS)
+## 📋 Network Prerequisites (AWS)
 
-### ⚠️ CRÍTICO: Security Groups
+### ⚠️ CRITICAL: Security Groups
 
-**A integração NÃO funcionará sem estas configurações de rede!**
+**The integration will NOT work without these network configurations!**
 
-#### 1. Security Group do EKS
+#### 1. EKS Security Group
 ```bash
-# Permitir que a VM do Vault acesse o Kubernetes API
+# Allow Vault VM to access Kubernetes API
 aws ec2 authorize-security-group-ingress \
   --group-id <EKS_CLUSTER_SECURITY_GROUP_ID> \
   --protocol tcp \
@@ -35,66 +35,66 @@ aws ec2 authorize-security-group-ingress \
   --cidr <VAULT_VM_PRIVATE_IP>/32
 ```
 
-**Como obter o Security Group ID:**
+**How to get the Security Group ID:**
 ```bash
 aws eks describe-cluster --name <CLUSTER_NAME> \
   --query 'cluster.resourcesVpcConfig.clusterSecurityGroupId' --output text
 ```
 
-#### 2. Security Group da VM do Vault
-- **Outbound:** Deve permitir todo tráfego (padrão) ou pelo menos porta 443 para o EKS
+#### 2. Vault VM Security Group
+- **Outbound:** Must allow all traffic (default) or at least port 443 to EKS
 
-#### 3. Testes de Conectividade (OBRIGATÓRIO)
+#### 3. Connectivity Tests (MANDATORY)
 
-**Teste 1: Vault → Kubernetes API**
+**Test 1: Vault → Kubernetes API**
 ```bash
-# SSH na VM do Vault
+# SSH to Vault VM
 ssh -i <key.pem> ubuntu@<VAULT_PUBLIC_IP>
 
-# Obter IP privado do K8s API
+# Get private IP of K8s API
 nslookup <EKS_API_ENDPOINT>
-# Exemplo: 694BFB09A17CDA85A62DB07C6508A656.gr7.us-east-1.eks.amazonaws.com
-# Resultado: 172.31.14.21, 172.31.73.148
+# Example: 694BFB09A17CDA85A62DB07C6508A656.gr7.us-east-1.eks.amazonaws.com
+# Result: 172.31.14.21, 172.31.73.148
 
-# Testar conectividade
+# Test connectivity
 curl -k -m 5 https://172.31.14.21:443/version
 ```
-**✅ Esperado:** JSON com versão do Kubernetes
-**❌ Se timeout:** Security Group do EKS não permite acesso da VM
+**✅ Expected:** JSON with Kubernetes version
+**❌ If timeout:** EKS Security Group does not allow access from VM
 
-**Teste 2: Kubernetes → Vault**
+**Test 2: Kubernetes → Vault**
 ```bash
 kubectl run test --rm -it --image=curlimages/curl -- \
   curl -k https://<VAULT_PUBLIC_IP>:8200/v1/sys/health
 ```
-**✅ Esperado:** JSON com status do Vault
-**❌ Se timeout:** Security Group da VM não permite acesso do K8s
+**✅ Expected:** JSON with Vault status
+**❌ If timeout:** VM Security Group does not allow access from K8s
 
-## 🚀 Setup Completo
+## 🚀 Complete Setup
 
-### 1. Configurar Vault com HTTPS
+### Step 1: Configure Vault with HTTPS
 
-**⚠️ Execute estes comandos NA VM DO VAULT via SSH:**
+**⚠️ Run these commands ON THE VAULT VM via SSH:**
 
 ```bash
-# SSH na VM do Vault
+# SSH to Vault VM
 ssh -i <key.pem> ubuntu@<VAULT_IP>
 
-# Criar diretório para TLS
+# Create directory for TLS
 sudo mkdir -p /opt/vault/tls
 cd /opt/vault/tls
 
-# Gerar certificado auto-assinado
+# Generate self-signed certificate
 sudo openssl genrsa -out vault-key.pem 2048
 sudo openssl req -new -x509 -key vault-key.pem -out vault-cert.pem -days 365 \
   -subj "/C=US/ST=NY/L=NYC/O=Redis/CN=<VAULT_IP>"
 
-# Configurar permissões
+# Configure permissions
 sudo chmod 600 vault-key.pem
 sudo chmod 644 vault-cert.pem
 sudo chown -R vault:vault /opt/vault/tls
 
-# Configurar Vault para HTTPS
+# Configure Vault for HTTPS
 sudo tee /etc/vault.d/vault.hcl > /dev/null <<EOF
 storage "file" {
   path = "/opt/vault/data"
